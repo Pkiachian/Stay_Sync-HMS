@@ -1,6 +1,6 @@
-import { Bell, Menu, Sun, Moon, X, CheckCheck } from 'lucide-react';
+import { BarChart3, Bell, CheckCheck, ClipboardCheck, Menu, Moon, Settings, Sparkles, Sun, X } from 'lucide-react';
 import { useUIStore } from '@/app/store/uiStore';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 
 const PAGE_TITLES: Record<string, string> = {
@@ -18,6 +18,13 @@ const NOTIFICATIONS = [
   { id: 3, title: 'Check-out complete', message: 'Peter Otieno checked out of Room 110',         time: '1 hr ago',   unread: true  },
   { id: 4, title: 'Payment received',   message: 'Invoice #SS-2024-00120 paid — $540',           time: '2 hr ago',   unread: false },
   { id: 5, title: 'Maintenance request','message': 'Room 312 — AC not working, ticket raised',  time: '3 hr ago',   unread: false },
+];
+
+const DASHBOARD_VIEWS = [
+  { label: 'Reception', to: '/bookings', Icon: ClipboardCheck },
+  { label: 'Manager', to: '/reports', Icon: BarChart3 },
+  { label: 'Housekeeping', to: '/housekeeping', Icon: Sparkles },
+  { label: 'Admin', to: '/reports', Icon: Settings },
 ];
 
 export function Header() {
@@ -47,9 +54,26 @@ export function Header() {
         </button>
       )}
 
-      <h1 className="text-base font-semibold flex-1">
+      <h1 className="text-base font-semibold">
         {PAGE_TITLES[pathname] ?? 'StaySync'}
       </h1>
+
+      <div className="flex-1">
+        {pathname === '/' && (
+          <div className="hidden lg:flex items-center gap-1.5">
+            {DASHBOARD_VIEWS.map(({ label, to, Icon }) => (
+              <Link
+                key={label}
+                to={to}
+                className="h-8 px-2.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex items-center gap-1.5"
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="flex items-center gap-2">
         {/* Theme toggle */}

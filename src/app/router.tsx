@@ -1,6 +1,6 @@
 import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import  DashboardLayout  from '@/components/layout/DashboardLayout';
 import LoginPage        from '@/features/auth/LoginPage';
 import DashboardPage    from '@/features/dashboard/page';
 import TapeChartPage    from '@/features/tape-chart/page';
@@ -15,31 +15,31 @@ function RequireAuth() {
   return <Outlet />;
 }
 
+function RoleRedirect() {
+  const user = useAuthStore((s) => s.user);
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === 'housekeeping') return <Navigate to="/housekeeping" replace />;
+  if (user.role === 'manager')      return <Navigate to="/reports"      replace />;
+  return <Navigate to="/" replace />;
+}
+
 export const router = createBrowserRouter([
-  {
-    path: '/login',
-    element: <LoginPage />,
-  },
+  { path: '/login', element: <LoginPage /> },
   {
     element: <RequireAuth />,
     children: [
       {
         element: <DashboardLayout />,
         children: [
-          {
-            element: <Outlet />,
-            children: [
-              { path: '/',             element: <DashboardPage />    },
-              { path: '/tape-chart',   element: <TapeChartPage />    },
-              { path: '/bookings',     element: <BookingsPage />     },
-              { path: '/housekeeping', element: <HousekeepingPage /> },
-              { path: '/guests',       element: <GuestsPage />       },
-              { path: '/reports',      element: <ReportsPage />      },
-            ],
-          },
+          { path: '/',             element: <DashboardPage />    },
+          { path: '/tape-chart',   element: <TapeChartPage />    },
+          { path: '/bookings',     element: <BookingsPage />     },
+          { path: '/housekeeping', element: <HousekeepingPage /> },
+          { path: '/guests',       element: <GuestsPage />       },
+          { path: '/reports',      element: <ReportsPage />      },
         ],
       },
     ],
   },
-  { path: '*', element: <Navigate to="/" replace /> },
+  { path: '*', element: <RoleRedirect /> },
 ]);

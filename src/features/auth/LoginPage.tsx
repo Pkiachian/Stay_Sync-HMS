@@ -5,12 +5,16 @@ import { HotelSlideshow } from '@/components/common/HotelSlideshow';
 import { Hotel } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login, isAuthenticated, isLoading } = useAuthStore();
+  const { login, isAuthenticated, isLoading, user } = useAuthStore();
   const [email, setEmail]       = useState('receptionist@hotel.com');
   const [password, setPassword] = useState('password');
   const [error, setError]       = useState('');
 
-  if (isAuthenticated) return <Navigate to="/" replace />;
+ if (isAuthenticated) {
+  if (user?.role === 'housekeeping') return <Navigate to="/housekeeping" replace />;
+  if (user?.role === 'manager')      return <Navigate to="/reports"      replace />;
+  return <Navigate to="/" replace />;
+}
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +29,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex">
       <div className="hidden lg:flex lg:w-3/5 relative">
-        <HotelSlideshow interval={3000} showLabel={true} overlay={true} />
+        <HotelSlideshow interval={4000} showLabel={true} overlay={true} />
         <div className="absolute top-8 left-8 z-20 flex items-center gap-3">
           <div className="w-10 h-10 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
             <Hotel className="w-5 h-5 text-white" />

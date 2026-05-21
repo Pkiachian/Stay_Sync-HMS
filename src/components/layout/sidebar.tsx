@@ -17,7 +17,7 @@ const NAV = [
   { label: 'Reports',      path: '/reports',      Icon: BarChart2       },
 ];
 
-export function Sidebar() {
+export default function Sidebar() {
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const { user, logout } = useAuthStore();
   return (

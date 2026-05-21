@@ -1,42 +1,66 @@
-import { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { addDays, format, differenceInDays, startOfDay, isToday, isWeekend } from 'date-fns';
-import { ChevronLeft, ChevronRight, X, BedDouble, User, Calendar, Hash } from 'lucide-react';
-import { mockTapeChartRooms } from '@/lib/mockData';
+import { useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { addDays, differenceInDays, format, isToday, isWeekend, startOfDay } from 'date-fns';
+import {
+  Ban,
+  BedDouble,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  CreditCard,
+  Hash,
+  LogIn,
+  LogOut,
+  MoveRight,
+  Pencil,
+  Phone,
+  Sparkles,
+  User,
+  X,
+} from 'lucide-react';
+import { mockArrivals, mockStats, mockTapeChartRooms } from '@/lib/mockData';
 import { cn } from '@/lib/utils';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 const DAYS = 30;
-const ROW_HEIGHT = 52;
-const ROOM_COL_WIDTH = 140;
-const DAY_WIDTH = 40;
+const ROW_HEIGHT = 56;
+const ROOM_COL_WIDTH = 156;
+const DAY_WIDTH = 42;
 
-const TYPE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'Standard King': { bg: '#3b82f6', text: '#ffffff', border: '#2563eb' },
-  'Deluxe King':   { bg: '#8b5cf6', text: '#ffffff', border: '#7c3aed' },
-  'Deluxe Twin':   { bg: '#06b6d4', text: '#ffffff', border: '#0891b2' },
-  'Suite':         { bg: '#f59e0b', text: '#ffffff', border: '#d97706' },
-  'Penthouse':     { bg: '#ef4444', text: '#ffffff', border: '#dc2626' },
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  confirmed:   '#3b82f6',
-  checked_in:  '#22c55e',
-  checked_out: '#94a3b8',
-  cancelled:   '#ef4444',
-  pending:     '#f59e0b',
+const STATUS_COLORS: Record<string, { bg: string; border: string; label: string }> = {
+  confirmed: { bg: '#f59e0b', border: '#d97706', label: 'Reserved' },
+  checked_in: { bg: '#22c55e', border: '#16a34a', label: 'Checked-in' },
+  checked_out: { bg: '#94a3b8', border: '#64748b', label: 'Checked-out' },
+  cancelled: { bg: '#ef4444', border: '#dc2626', label: 'Cancelled' },
+  pending: { bg: '#f59e0b', border: '#d97706', label: 'Pending' },
+  overdue: { bg: '#ef4444', border: '#dc2626', label: 'Overdue/Issue' },
 };
 
 const ROOM_STATUS_BADGE: Record<string, { bg: string; label: string }> = {
-  available:   { bg: '#22c55e', label: 'Available'   },
-  occupied:    { bg: '#3b82f6', label: 'Occupied'    },
-  dirty:       { bg: '#f59e0b', label: 'Dirty'       },
-  cleaning:    { bg: '#a855f7', label: 'Cleaning'    },
-  maintenance: { bg: '#ef4444', label: 'Maintenance' },
-  blocked:     { bg: '#94a3b8', label: 'Blocked'     },
+  available: { bg: '#22c55e', label: 'Available' },
+  occupied: { bg: '#ef4444', label: 'Occupied' },
+  reserved: { bg: '#f59e0b', label: 'Reserved' },
+  dirty: { bg: '#f59e0b', label: 'Cleaning' },
+  cleaning: { bg: '#f59e0b', label: 'Cleaning' },
+  maintenance: { bg: '#94a3b8', label: 'Maintenance' },
+  blocked: { bg: '#94a3b8', label: 'Blocked' },
 };
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+const phoneByGuest: Record<string, string> = {
+  'James Odhiambo': '+254712345678',
+  'Mary Wanjiku': '+254701112233',
+  'Sandra Achieng': '+254767890123',
+  'Brian Mutua': '+254734567890',
+  'Aisha Mohamed': '+254723456789',
+  'Peter Otieno': '+254756789012',
+  'Fatuma Ali': '+254767890123',
+  'John Kamau': '+254711223344',
+  'Grace Wanjiru': '+254745678901',
+  'David Kimani': '+254733445566',
+  'Amina Hassan': '+254723456789',
+  'Robert Mwangi': '+254700998877',
+};
+
 interface Booking {
   id: number;
   reference: string;
@@ -57,9 +81,31 @@ interface Room {
   bookings: Booking[];
 }
 
-// ─── Booking Detail Modal ─────────────────────────────────────────────────────
+function SummaryCard({
+  label,
+  value,
+  icon,
+  gradient,
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ReactNode;
+  gradient: string;
+}) {
+  return (
+    <div className={cn('rounded-2xl bg-gradient-to-br p-4 text-white shadow-lg', gradient)}>
+      <div className="mb-2 opacity-85">{icon}</div>
+      <p className="text-2xl font-bold">{value}</p>
+      <p className="text-xs text-white/80">{label}</p>
+    </div>
+  );
+}
+
 function BookingModal({ booking, room, onClose }: { booking: Booking; room: Room; onClose: () => void }) {
-  const colors = TYPE_COLORS[room.type_name] ?? TYPE_COLORS['Standard King'];
+  const colors = STATUS_COLORS[booking.status] ?? STATUS_COLORS.confirmed;
+  const phone = phoneByGuest[booking.guest_name] ?? '+254700000000';
+  const paymentStatus = booking.status === 'checked_in' ? 'Paid' : booking.status === 'confirmed' ? 'Partial' : 'Pending';
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -72,66 +118,46 @@ function BookingModal({ booking, room, onClose }: { booking: Booking; room: Room
         />
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
-          animate={{ opacity: 1, scale: 1,    y: 0  }}
-          exit={{    opacity: 0, scale: 0.95, y: 20  }}
-          className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm z-10 overflow-hidden"
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
         >
-          {/* Header */}
           <div className="p-5 text-white" style={{ background: colors.bg }}>
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-medium opacity-80">{booking.reference}</span>
-              <button onClick={onClose} className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors">
-                <X className="w-4 h-4" />
+              <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20 hover:bg-white/30">
+                <X className="h-4 w-4" />
               </button>
             </div>
             <h3 className="text-xl font-bold">{booking.guest_name}</h3>
-            <p className="text-sm opacity-80 mt-1">{room.type_name} · Room {room.number}</p>
+            <p className="mt-1 text-sm opacity-80">{room.type_name} - Room {room.number}</p>
           </div>
 
-          {/* Details */}
-          <div className="p-5 space-y-3">
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-              <Calendar className="w-4 h-4 text-gray-400" />
-              <div>
-                <p className="text-xs text-gray-400">Check-in</p>
-                <p className="text-sm font-semibold">{format(new Date(booking.check_in), 'MMM dd, yyyy')}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-              <Calendar className="w-4 h-4 text-gray-400" />
-              <div>
-                <p className="text-xs text-gray-400">Check-out</p>
-                <p className="text-sm font-semibold">{format(new Date(booking.check_out), 'MMM dd, yyyy')}</p>
-              </div>
-            </div>
+          <div className="space-y-3 p-5">
             <div className="grid grid-cols-2 gap-3">
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                <Hash className="w-4 h-4 text-gray-400" />
-                <div>
-                  <p className="text-xs text-gray-400">Nights</p>
-                  <p className="text-sm font-semibold">{booking.nights}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                <User className="w-4 h-4 text-gray-400" />
-                <div>
-                  <p className="text-xs text-gray-400">Status</p>
-                  <p className="text-sm font-semibold capitalize" style={{ color: STATUS_COLORS[booking.status] }}>
-                    {booking.status.replace('_', ' ')}
-                  </p>
-                </div>
-              </div>
+              <Detail icon={<Calendar className="h-4 w-4 text-gray-400" />} label="Check-in" value={format(new Date(booking.check_in), 'MMM dd, yyyy')} />
+              <Detail icon={<Calendar className="h-4 w-4 text-gray-400" />} label="Check-out" value={format(new Date(booking.check_out), 'MMM dd, yyyy')} />
+              <Detail icon={<Hash className="h-4 w-4 text-gray-400" />} label="Nights" value={`${booking.nights}`} />
+              <Detail icon={<User className="h-4 w-4 text-gray-400" />} label="Status" value={colors.label} />
+              <Detail icon={<Phone className="h-4 w-4 text-gray-400" />} label="Phone" value={phone} />
+              <Detail icon={<CreditCard className="h-4 w-4 text-gray-400" />} label="Payment" value={paymentStatus} />
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="px-5 pb-5 flex gap-2">
-            <button className="flex-1 h-9 rounded-xl text-sm font-medium text-white transition-colors" style={{ background: colors.bg }}>
-              Edit Booking
-            </button>
-            <button className="flex-1 h-9 rounded-xl text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
-              Check In
-            </button>
+          <div className="grid grid-cols-2 gap-2 px-5 pb-5">
+            {[
+              { label: 'Edit', icon: Pencil, className: 'bg-blue-600 text-white hover:bg-blue-700' },
+              { label: 'Move Room', icon: MoveRight, className: 'bg-violet-600 text-white hover:bg-violet-700' },
+              { label: 'Extend Stay', icon: Clock, className: 'bg-amber-500 text-white hover:bg-amber-600' },
+              { label: 'Cancel', icon: Ban, className: 'bg-red-50 text-red-600 hover:bg-red-100' },
+              { label: 'Check In', icon: LogIn, className: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' },
+              { label: 'Check Out', icon: LogOut, className: 'bg-slate-100 text-slate-700 hover:bg-slate-200' },
+            ].map(({ label, icon: Icon, className }) => (
+              <button key={label} className={cn('flex h-9 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold transition-colors', className)}>
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </button>
+            ))}
           </div>
         </motion.div>
       </div>
@@ -139,110 +165,149 @@ function BookingModal({ booking, room, onClose }: { booking: Booking; room: Room
   );
 }
 
-// ─── Main Tape Chart ──────────────────────────────────────────────────────────
+function Detail({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl bg-gray-50 p-3">
+      {icon}
+      <div className="min-w-0">
+        <p className="text-xs text-gray-400">{label}</p>
+        <p className="truncate text-sm font-semibold text-gray-800">{value}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function TapeChartPage() {
   const [startDate, setStartDate] = useState(() => startOfDay(new Date('2026-05-13')));
   const [selectedBooking, setSelectedBooking] = useState<{ booking: Booking; room: Room } | null>(null);
+  const [roomTypeFilter, setRoomTypeFilter] = useState('all');
+  const [floorFilter, setFloorFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const dates = Array.from({ length: DAYS }, (_, i) => addDays(startDate, i));
+  const roomTypes = Array.from(new Set(mockTapeChartRooms.map((room) => room.type_name)));
+  const floorOptions = Array.from(new Set(mockTapeChartRooms.map((room) => room.floor))).sort();
 
-  const prevMonth = () => setStartDate((d) => addDays(d, -7));
-  const nextMonth = () => setStartDate((d) => addDays(d,  7));
+  const filteredRooms = mockTapeChartRooms.filter((room) => {
+    const matchesType = roomTypeFilter === 'all' || room.type_name === roomTypeFilter;
+    const matchesFloor = floorFilter === 'all' || String(room.floor) === floorFilter;
+    const matchesStatus = statusFilter === 'all' || room.status === statusFilter || room.bookings.some((booking) => booking.status === statusFilter);
+    return matchesType && matchesFloor && matchesStatus;
+  });
 
-  const getBookingStyle = (booking: Booking, room: Room) => {
-    const checkIn  = startOfDay(new Date(booking.check_in));
+  const floors = Array.from(new Set(filteredRooms.map((room) => room.floor))).sort();
+
+  const getBookingStyle = (booking: Booking) => {
+    const checkIn = startOfDay(new Date(booking.check_in));
     const checkOut = startOfDay(new Date(booking.check_out));
-    const colors   = TYPE_COLORS[room.type_name] ?? TYPE_COLORS['Standard King'];
-
+    const colors = STATUS_COLORS[booking.status] ?? STATUS_COLORS.confirmed;
     const startOffset = differenceInDays(checkIn, startDate);
-    const duration    = differenceInDays(checkOut, checkIn);
+    const duration = differenceInDays(checkOut, checkIn);
 
     if (startOffset + duration < 0 || startOffset >= DAYS) return null;
 
-    const clampedStart    = Math.max(0, startOffset);
+    const clampedStart = Math.max(0, startOffset);
     const clampedDuration = Math.min(duration + startOffset, DAYS) - clampedStart;
     if (clampedDuration <= 0) return null;
 
     return {
-      left:   clampedStart * DAY_WIDTH + 2,
-      width:  clampedDuration * DAY_WIDTH - 4,
+      left: clampedStart * DAY_WIDTH + 2,
+      width: clampedDuration * DAY_WIDTH - 4,
       colors,
     };
   };
 
-  // Group rooms by floor
-  const floors = Array.from(new Set(mockTapeChartRooms.map((r) => r.floor))).sort();
-
   return (
-    <div className="p-4 h-full flex flex-col gap-4">
-      {/* Header controls */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="flex h-full flex-col gap-4 p-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <SummaryCard label="Occupied Rooms" value={mockStats.occupiedRooms} icon={<BedDouble className="h-5 w-5" />} gradient="from-red-500 to-red-700" />
+        <SummaryCard label="Available Rooms" value={mockStats.availableRooms} icon={<BedDouble className="h-5 w-5" />} gradient="from-emerald-500 to-teal-700" />
+        <SummaryCard label="Today's Arrivals" value={mockArrivals.length} icon={<LogIn className="h-5 w-5" />} gradient="from-blue-500 to-indigo-700" />
+        <SummaryCard label="Today's Departures" value={mockStats.checkOutsToday} icon={<LogOut className="h-5 w-5" />} gradient="from-amber-500 to-orange-700" />
+        <SummaryCard label="Occupancy Rate" value={`${mockStats.occupancyRate}%`} icon={<Sparkles className="h-5 w-5" />} gradient="from-violet-500 to-purple-700" />
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-white drop-shadow">Tape Chart</h2>
-          <p className="text-sm text-white/70">
-            {format(startDate, 'MMM dd')} — {format(addDays(startDate, DAYS - 1), 'MMM dd, yyyy')}
-          </p>
+          <p className="text-sm text-white/70">{format(startDate, 'MMM dd')} - {format(addDays(startDate, DAYS - 1), 'MMM dd, yyyy')}</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Navigation */}
-          <button onClick={prevMonth} className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur text-white hover:bg-white/30 flex items-center justify-center transition-colors">
-            <ChevronLeft className="w-4 h-4" />
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            value={format(startDate, 'yyyy-MM-dd')}
+            onChange={(event) => setStartDate(startOfDay(new Date(event.target.value)))}
+            className="h-8 rounded-lg bg-white px-3 text-xs font-semibold text-gray-700 outline-none"
+          />
+          <button onClick={() => setStartDate((date) => addDays(date, -7))} className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white hover:bg-white/30">
+            <ChevronLeft className="h-4 w-4" />
           </button>
-          <button
-            onClick={() => setStartDate(startOfDay(new Date()))}
-            className="px-3 h-8 rounded-lg bg-white text-blue-600 text-xs font-semibold hover:bg-blue-50 transition-colors"
-          >
+          <button onClick={() => setStartDate(startOfDay(new Date()))} className="h-8 rounded-lg bg-white px-3 text-xs font-semibold text-blue-600 hover:bg-blue-50">
             Today
           </button>
-          <button onClick={nextMonth} className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur text-white hover:bg-white/30 flex items-center justify-center transition-colors">
-            <ChevronRight className="w-4 h-4" />
+          <button onClick={() => setStartDate((date) => addDays(date, 7))} className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white hover:bg-white/30">
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {Object.entries(TYPE_COLORS).map(([type, colors]) => (
-          <div key={type} className="flex items-center gap-1.5 bg-white/10 backdrop-blur px-3 py-1 rounded-full">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: colors.bg }} />
-            <span className="text-xs text-white font-medium">{type}</span>
-          </div>
-        ))}
+      <div className="flex flex-col gap-3 rounded-2xl bg-white/90 p-4 shadow-sm backdrop-blur">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <select value={roomTypeFilter} onChange={(event) => setRoomTypeFilter(event.target.value)} className="h-9 rounded-xl border border-gray-200 px-3 text-sm outline-none">
+            <option value="all">All room types</option>
+            {roomTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+          </select>
+          <select value={floorFilter} onChange={(event) => setFloorFilter(event.target.value)} className="h-9 rounded-xl border border-gray-200 px-3 text-sm outline-none">
+            <option value="all">All floors</option>
+            {floorOptions.map((floor) => <option key={floor} value={floor}>Floor {floor}</option>)}
+          </select>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-9 rounded-xl border border-gray-200 px-3 text-sm outline-none">
+            <option value="all">All statuses</option>
+            <option value="checked_in">Checked-in</option>
+            <option value="confirmed">Reserved</option>
+            <option value="available">Available</option>
+            <option value="dirty">Cleaning</option>
+            <option value="maintenance">Maintenance</option>
+          </select>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {[
+            { label: 'Checked-in', color: STATUS_COLORS.checked_in.bg },
+            { label: 'Reserved', color: STATUS_COLORS.confirmed.bg },
+            { label: 'Overdue/Issue', color: STATUS_COLORS.overdue.bg },
+            { label: 'Maintenance', color: ROOM_STATUS_BADGE.maintenance.bg },
+            { label: 'Cleaning', color: ROOM_STATUS_BADGE.cleaning.bg },
+            { label: 'Available', color: ROOM_STATUS_BADGE.available.bg },
+          ].map((item) => (
+            <div key={item.label} className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} />
+              <span className="text-xs font-medium text-gray-600">{item.label}</span>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-xs text-gray-400">Drag-and-drop resizing and room moves can be wired to these booking bars later; the visual structure is ready for it.</p>
       </div>
 
-      {/* Chart */}
-      <div className="flex-1 bg-white/90 backdrop-blur rounded-2xl overflow-hidden shadow-xl flex flex-col">
-        {/* Sticky date header */}
-        <div className="flex border-b border-gray-200 sticky top-0 bg-white z-20">
-          {/* Room column header */}
-          <div
-            className="shrink-0 flex items-center gap-2 px-3 border-r border-gray-200 bg-gray-50"
-            style={{ width: ROOM_COL_WIDTH, height: ROW_HEIGHT }}
-          >
-            <BedDouble className="w-4 h-4 text-gray-400" />
+      <div className="flex flex-1 flex-col overflow-hidden rounded-2xl bg-white/90 shadow-xl backdrop-blur">
+        <div className="sticky top-0 z-20 flex border-b border-gray-200 bg-white">
+          <div className="flex shrink-0 items-center gap-2 border-r border-gray-200 bg-gray-50 px-3" style={{ width: ROOM_COL_WIDTH, height: ROW_HEIGHT }}>
+            <BedDouble className="h-4 w-4 text-gray-400" />
             <span className="text-xs font-semibold text-gray-500">ROOM</span>
           </div>
 
-          {/* Date columns */}
           <div className="flex overflow-hidden" ref={scrollRef}>
-            {dates.map((date, i) => (
+            {dates.map((date) => (
               <div
-                key={i}
+                key={date.toISOString()}
                 style={{ width: DAY_WIDTH, minWidth: DAY_WIDTH }}
-                className={cn(
-                  'flex flex-col items-center justify-center border-r border-gray-100 py-1',
-                  isToday(date) ? 'bg-blue-50' : isWeekend(date) ? 'bg-gray-50' : 'bg-white'
-                )}
+                className={cn('flex flex-col items-center justify-center border-r border-gray-100 py-1', isToday(date) ? 'bg-blue-50' : isWeekend(date) ? 'bg-gray-50' : 'bg-white')}
               >
-                <span className={cn('text-[10px] font-medium', isToday(date) ? 'text-blue-600' : 'text-gray-400')}>
-                  {format(date, 'EEE')}
-                </span>
-                <span className={cn(
-                  'text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full',
-                  isToday(date) ? 'bg-blue-500 text-white' : 'text-gray-700'
-                )}>
+                <span className={cn('text-[10px] font-medium', isToday(date) ? 'text-blue-600' : 'text-gray-400')}>{format(date, 'EEE')}</span>
+                <span className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold', isToday(date) ? 'bg-blue-500 text-white' : 'text-gray-700')}>
                   {format(date, 'd')}
                 </span>
               </div>
@@ -250,102 +315,73 @@ export default function TapeChartPage() {
           </div>
         </div>
 
-        {/* Room rows */}
-        <div className="overflow-y-auto flex-1">
+        <div className="flex-1 overflow-y-auto">
           {floors.map((floor) => (
             <div key={floor}>
-              {/* Floor divider */}
-              <div className="flex items-center bg-gray-50 border-b border-gray-200 px-3 py-1">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                  Floor {floor}
-                </span>
+              <div className="flex items-center border-b border-gray-200 bg-gray-50 px-3 py-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Floor {floor}</span>
               </div>
 
-              {mockTapeChartRooms
-                .filter((r) => r.floor === floor)
-                .map((room) => {
-                  const statusBadge = ROOM_STATUS_BADGE[room.status] ?? ROOM_STATUS_BADGE['available'];
-                  return (
-                    <div
-                      key={room.id}
-                      className="flex border-b border-gray-100 hover:bg-blue-50/30 transition-colors group"
-                      style={{ height: ROW_HEIGHT }}
-                    >
-                      {/* Room info */}
-                      <div
-                        className="shrink-0 flex items-center gap-2 px-3 border-r border-gray-200"
-                        style={{ width: ROOM_COL_WIDTH }}
-                      >
-                        <div>
-                          <p className="text-sm font-bold text-gray-800">#{room.number}</p>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <div className="w-1.5 h-1.5 rounded-full" style={{ background: statusBadge.bg }} />
-                            <p className="text-[10px] text-gray-400">{room.type_name}</p>
-                          </div>
+              {filteredRooms.filter((room) => room.floor === floor).map((room) => {
+                const statusBadge = ROOM_STATUS_BADGE[room.status] ?? ROOM_STATUS_BADGE.available;
+                return (
+                  <div key={room.id} className="group flex border-b border-gray-100 transition-colors hover:bg-blue-50/30" style={{ height: ROW_HEIGHT }}>
+                    <div className="flex shrink-0 items-center gap-2 border-r border-gray-200 px-3" style={{ width: ROOM_COL_WIDTH }}>
+                      <div>
+                        <p className="text-sm font-bold text-gray-800">#{room.number}</p>
+                        <div className="mt-0.5 flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ background: statusBadge.bg }} />
+                          <p className="text-[10px] text-gray-400">{room.type_name} - {statusBadge.label}</p>
                         </div>
                       </div>
-
-                      {/* Booking blocks */}
-                      <div className="flex-1 relative overflow-hidden">
-                        {/* Day grid lines */}
-                        {dates.map((date, i) => (
-                          <div
-                            key={i}
-                            className={cn(
-                              'absolute top-0 bottom-0 border-r border-gray-100',
-                              isToday(date) ? 'bg-blue-50/50' : isWeekend(date) ? 'bg-gray-50/50' : ''
-                            )}
-                            style={{ left: i * DAY_WIDTH, width: DAY_WIDTH }}
-                          />
-                        ))}
-
-                        {/* Booking blocks */}
-                        {room.bookings.map((booking) => {
-                          const style = getBookingStyle(booking, room);
-                          if (!style) return null;
-                          return (
-                            <motion.button
-                              key={booking.id}
-                              whileHover={{ scale: 1.02, zIndex: 10 }}
-                              onClick={() => setSelectedBooking({ booking, room })}
-                              className="absolute top-2 bottom-2 rounded-lg text-left overflow-hidden shadow-sm cursor-pointer"
-                              style={{
-                                left:       style.left,
-                                width:      style.width,
-                                background: style.colors.bg,
-                                borderLeft: `3px solid ${style.colors.border}`,
-                              }}
-                              title={`${booking.guest_name} — ${booking.nights} nights`}
-                            >
-                              <div className="px-2 py-1 h-full flex flex-col justify-center">
-                                <p className="text-xs font-semibold text-white truncate leading-tight">
-                                  {booking.guest_name.split(' ')[0]}
-                                </p>
-                                {style.width > 60 && (
-                                  <p className="text-[10px] text-white/70 truncate">
-                                    {booking.nights}n · {booking.status.replace('_', ' ')}
-                                  </p>
-                                )}
-                              </div>
-                            </motion.button>
-                          );
-                        })}
-                      </div>
                     </div>
-                  );
-                })}
+
+                    <div className="relative flex-1 overflow-hidden">
+                      {dates.map((date, index) => (
+                        <div
+                          key={date.toISOString()}
+                          className={cn('absolute bottom-0 top-0 border-r border-gray-100', isToday(date) ? 'bg-blue-50/50' : isWeekend(date) ? 'bg-gray-50/50' : '')}
+                          style={{ left: index * DAY_WIDTH, width: DAY_WIDTH }}
+                        />
+                      ))}
+
+                      {room.bookings.map((booking) => {
+                        const style = getBookingStyle(booking);
+                        if (!style) return null;
+                        return (
+                          <motion.button
+                            key={booking.id}
+                            whileHover={{ scale: 1.02, zIndex: 10 }}
+                            onClick={() => setSelectedBooking({ booking, room })}
+                            className="absolute bottom-2 top-2 cursor-pointer overflow-hidden rounded-lg text-left shadow-sm"
+                            style={{
+                              left: style.left,
+                              width: style.width,
+                              background: style.colors.bg,
+                              borderLeft: `3px solid ${style.colors.border}`,
+                            }}
+                            title={`${booking.guest_name} - Room ${room.number} - ${booking.check_in} to ${booking.check_out} - ${style.colors.label} - ${booking.nights} nights`}
+                          >
+                            <div className="flex h-full flex-col justify-center px-2 py-1">
+                              <p className="truncate text-xs font-semibold leading-tight text-white">{booking.guest_name}</p>
+                              {style.width > 72 && (
+                                <p className="truncate text-[10px] text-white/75">R{room.number} - {booking.nights}n - {style.colors.label}</p>
+                              )}
+                            </div>
+                          </motion.button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Booking detail modal */}
       {selectedBooking && (
-        <BookingModal
-          booking={selectedBooking.booking}
-          room={selectedBooking.room}
-          onClose={() => setSelectedBooking(null)}
-        />
+        <BookingModal booking={selectedBooking.booking} room={selectedBooking.room} onClose={() => setSelectedBooking(null)} />
       )}
     </div>
   );
