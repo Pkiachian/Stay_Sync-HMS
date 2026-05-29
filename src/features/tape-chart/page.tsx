@@ -101,7 +101,7 @@ function SummaryCard({
   );
 }
 
-function BookingModal({ booking, room, onClose }: { booking: Booking; room: Room; onClose: () => void }) {
+function BookingModal({ booking, room, onClose, onAction }: { booking: Booking; room: Room; onClose: () => void; onAction: (action: string) => void }) {
   const colors = STATUS_COLORS[booking.status] ?? STATUS_COLORS.confirmed;
   const phone = phoneByGuest[booking.guest_name] ?? '+254700000000';
   const paymentStatus = booking.status === 'checked_in' ? 'Paid' : booking.status === 'confirmed' ? 'Partial' : 'Pending';
@@ -153,7 +153,7 @@ function BookingModal({ booking, room, onClose }: { booking: Booking; room: Room
               { label: 'Check In', icon: LogIn, className: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' },
               { label: 'Check Out', icon: LogOut, className: 'bg-slate-100 text-slate-700 hover:bg-slate-200' },
             ].map(({ label, icon: Icon, className }) => (
-              <button key={label} className={cn('flex h-9 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold transition-colors', className)}>
+              <button key={label} onClick={() => onAction(label)} className={cn('flex h-9 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold transition-colors', className)}>
                 <Icon className="h-3.5 w-3.5" />
                 {label}
               </button>
@@ -178,18 +178,20 @@ function Detail({ icon, label, value }: { icon: React.ReactNode; label: string; 
 }
 
 export default function TapeChartPage() {
+  const [rooms, setRooms] = useState<Room[]>(mockTapeChartRooms as Room[]);
   const [startDate, setStartDate] = useState(() => startOfDay(new Date('2026-05-13')));
   const [selectedBooking, setSelectedBooking] = useState<{ booking: Booking; room: Room } | null>(null);
+  const [actionMessage, setActionMessage] = useState('');
   const [roomTypeFilter, setRoomTypeFilter] = useState('all');
   const [floorFilter, setFloorFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const dates = Array.from({ length: DAYS }, (_, i) => addDays(startDate, i));
-  const roomTypes = Array.from(new Set(mockTapeChartRooms.map((room) => room.type_name)));
-  const floorOptions = Array.from(new Set(mockTapeChartRooms.map((room) => room.floor))).sort();
+  const roomTypes = Array.from(new Set(rooms.map((room) => room.type_name)));
+  const floorOptions = Array.from(new Set(rooms.map((room) => room.floor))).sort();
 
-  const filteredRooms = mockTapeChartRooms.filter((room) => {
+  const filteredRooms = rooms.filter((room) => {
     const matchesType = roomTypeFilter === 'all' || room.type_name === roomTypeFilter;
     const matchesFloor = floorFilter === 'all' || String(room.floor) === floorFilter;
     const matchesStatus = statusFilter === 'all' || room.status === statusFilter || room.bookings.some((booking) => booking.status === statusFilter);
@@ -197,6 +199,50 @@ export default function TapeChartPage() {
   });
 
   const floors = Array.from(new Set(filteredRooms.map((room) => room.floor))).sort();
+
+  const showActionMessage = (message: string) => {
+    setActionMessage(message);
+    window.setTimeout(() => setActionMessage(''), 3500);
+  };
+
+  const handleBookingAction = (action: string) => {
+    if (!selectedBooking) return;
+    const { booking, room } = selectedBooking;
+
+    if (action === 'Edit') {
+      showActionMessage(`Editing ${booking.reference}.`);
+      return;
+    }
+
+    if (action === 'Move Room') {
+      const targetRoom = rooms.find((candidate) => candidate.id !== room.id && candidate.status === 'available') ?? rooms.find((candidate) => candidate.id !== room.id);
+      if (!targetRoom) return;
+      const movedBooking = { ...booking, room_id: targetRoom.id };
+      setRooms((prev) => prev.map((candidate) => {
+        if (candidate.id === room.id) return { ...candidate, bookings: candidate.bookings.filter((item) => item.id !== booking.id) };
+        if (candidate.id === targetRoom.id) return { ...candidate, status: 'reserved', bookings: [...candidate.bookings, movedBooking] };
+        return candidate;
+      }));
+      setSelectedBooking({ booking: movedBooking, room: targetRoom });
+      showActionMessage(`${booking.guest_name} moved to Room ${targetRoom.number}.`);
+      return;
+    }
+
+    const nextBooking = { ...booking };
+    if (action === 'Extend Stay') {
+      nextBooking.check_out = format(addDays(new Date(booking.check_out), 1), 'yyyy-MM-dd');
+      nextBooking.nights = booking.nights + 1;
+    }
+    if (action === 'Cancel') nextBooking.status = 'cancelled';
+    if (action === 'Check In') nextBooking.status = 'checked_in';
+    if (action === 'Check Out') nextBooking.status = 'checked_out';
+
+    setRooms((prev) => prev.map((candidate) => candidate.id === room.id
+      ? { ...candidate, bookings: candidate.bookings.map((item) => item.id === booking.id ? nextBooking : item) }
+      : candidate));
+    setSelectedBooking({ booking: nextBooking, room });
+    showActionMessage(`${action} applied to ${booking.reference}.`);
+  };
 
   const getBookingStyle = (booking: Booking) => {
     const checkIn = startOfDay(new Date(booking.check_in));
@@ -289,7 +335,8 @@ export default function TapeChartPage() {
           ))}
         </div>
 
-        <p className="text-xs text-gray-400">Drag-and-drop resizing and room moves can be wired to these booking bars later; the visual structure is ready for it.</p>
+        <p className="text-xs text-gray-400">Use the booking modal actions to move rooms, extend stays, cancel bookings, or check guests in and out.</p>
+        {actionMessage && <p className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">{actionMessage}</p>}
       </div>
 
       <div className="flex flex-1 flex-col overflow-hidden rounded-2xl bg-white/90 shadow-xl backdrop-blur">
@@ -381,7 +428,7 @@ export default function TapeChartPage() {
       </div>
 
       {selectedBooking && (
-        <BookingModal booking={selectedBooking.booking} room={selectedBooking.room} onClose={() => setSelectedBooking(null)} />
+        <BookingModal booking={selectedBooking.booking} room={selectedBooking.room} onClose={() => setSelectedBooking(null)} onAction={handleBookingAction} />
       )}
     </div>
   );

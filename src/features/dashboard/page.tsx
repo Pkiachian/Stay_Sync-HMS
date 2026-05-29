@@ -1,455 +1,257 @@
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart, Pie, Cell,
-} from 'recharts';
-import {
-  BedDouble, LogIn, LogOut, DollarSign, AlertCircle,
-  Sparkles, ArrowUpRight, Bell, CheckCircle, Wrench,
-  Info, Plus, UserCheck, UserX, FileText, Calendar,
-  Sun, Moon, User, ChevronDown, X, Menu,
+  AlertCircle,
+  Banknote,
+  BedDouble,
+  Bell,
+  CalendarDays,
+  CheckCircle2,
+  CreditCard,
+  FileText,
+  Hotel,
+  LogIn,
+  LogOut,
+  Plus,
+  Search,
+  Sparkles,
+  TrendingUp,
+  UserCheck,
 } from 'lucide-react';
-import {
-  mockStats, mockOccupancyWeek, mockMonthlyRevenue,
-  mockRoomStatus, mockRecentBookings, mockArrivals,
-  mockNotifications, mockRoomGrid,
-} from '@/lib/mockData';
-import { HotelSlideshow } from '@/components/common/HotelSlideshow';
-import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
 import { useAuthStore } from '@/app/store/authStore';
-import { useUIStore } from '@/app/store/uiStore';
+import { mockArrivals, mockNotifications, mockStats } from '@/lib/mockData';
+import { cn } from '@/lib/utils';
 
-const fadeUp = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
-const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
-
-const STATUS_STYLES: Record<string, string> = {
-  confirmed:   'bg-blue-100 text-blue-700',
-  checked_in:  'bg-green-100 text-green-700',
-  checked_out: 'bg-gray-100 text-gray-500',
-  cancelled:   'bg-red-100 text-red-600',
-  pending:     'bg-yellow-100 text-yellow-700',
+const fadeUp = {
+  hidden: { opacity: 0, y: 18 },
+  show: { opacity: 1, y: 0 },
 };
 
-function StatusBadge({ status }: { status: string }) {
+const stagger = {
+  show: { transition: { staggerChildren: 0.06 } },
+};
+
+const quickActions = [
+  { label: 'Add Booking', to: '/bookings', icon: Plus, className: 'bg-blue-600 hover:bg-blue-700' },
+  { label: 'Check In', to: '/bookings', icon: LogIn, className: 'bg-emerald-600 hover:bg-emerald-700' },
+  { label: 'Check Out', to: '/bookings', icon: LogOut, className: 'bg-rose-600 hover:bg-rose-700' },
+  { label: 'Assign Room', to: '/tape-chart', icon: BedDouble, className: 'bg-violet-600 hover:bg-violet-700' },
+  { label: 'Invoice', to: '/reports', icon: FileText, className: 'bg-slate-700 hover:bg-slate-800' },
+];
+
+function formatDateTime(date: Date) {
+  return new Intl.DateTimeFormat('en-KE', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function greetingFor(date: Date) {
+  const hour = date.getHours();
+  if (hour < 12) return 'Good Morning';
+  if (hour < 17) return 'Good Afternoon';
+  return 'Good Evening';
+}
+
+function SectionCard({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', STATUS_STYLES[status] ?? 'bg-gray-100')}>
-      {status.replace('_', ' ')}
-    </span>
+    <motion.section
+      variants={fadeUp}
+      className={cn('rounded-2xl border border-white/14 bg-white/92 p-5 text-slate-900 shadow-xl shadow-slate-950/10 backdrop-blur-xl', className)}
+    >
+      {children}
+    </motion.section>
   );
 }
 
-const ROOM_COLORS: Record<string, { bg: string; label: string }> = {
-  occupied:    { bg: '#3b82f6', label: 'Occupied'    },
-  available:   { bg: '#22c55e', label: 'Available'   },
-  cleaning:    { bg: '#f59e0b', label: 'Cleaning'    },
-  maintenance: { bg: '#ef4444', label: 'Maintenance' },
-  dirty:       { bg: '#f97316', label: 'Dirty'       },
-};
-
-function NotifIcon({ type }: { type: string }) {
-  if (type === 'warning') return <AlertCircle className="w-4 h-4 text-amber-500" />;
-  if (type === 'error')   return <Wrench      className="w-4 h-4 text-red-500"   />;
-  if (type === 'success') return <CheckCircle className="w-4 h-4 text-green-500" />;
-  return <Info className="w-4 h-4 text-blue-500" />;
+function SectionTitle({ title, subtitle, icon }: { title: string; subtitle?: string; icon?: React.ReactNode }) {
+  return (
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <div>
+        <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+        {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+      </div>
+      {icon && <div className="rounded-xl bg-slate-100 p-2 text-slate-600">{icon}</div>}
+    </div>
+  );
 }
 
-interface KPICardProps {
+function KpiCard({
+  label,
+  value,
+  sub,
+  icon,
+  className,
+}: {
   label: string;
   value: string | number;
-  sub?: string;
+  sub: string;
   icon: React.ReactNode;
-  gradient: string;
-  onClick?: () => void;
-}
-
-function KPICard({ label, value, sub, icon, gradient, onClick }: KPICardProps) {
+  className: string;
+}) {
   return (
-    <motion.div
-      variants={fadeUp}
-      whileHover={{ scale: 1.03, y: -2 }}
-      onClick={onClick}
-      className={cn('rounded-2xl p-5 text-white shadow-lg relative overflow-hidden cursor-pointer', gradient)}
-    >
-      <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
-      <div className="relative z-10">
-        <div className="flex items-center justify-between mb-4">
-          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-            {icon}
-          </div>
-          <ArrowUpRight className="w-4 h-4 text-white/50" />
-        </div>
-        <p className="text-3xl font-bold">{value}</p>
-        <p className="text-white/80 text-sm mt-1">{label}</p>
-        {sub && <p className="text-white/60 text-xs mt-0.5">{sub}</p>}
+    <motion.div variants={fadeUp} whileHover={{ y: -3 }} className={cn('rounded-2xl p-4 text-white shadow-xl shadow-slate-950/15', className)}>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="rounded-xl bg-white/18 p-2">{icon}</div>
+        <TrendingUp className="h-4 w-4 text-white/70" />
       </div>
+      <p className="text-2xl font-bold leading-tight">{value}</p>
+      <p className="mt-1 text-sm text-white/86">{label}</p>
+      <p className="mt-2 text-xs text-white/70">{sub}</p>
     </motion.div>
   );
 }
 
-function LiveClock() {
-  const [time, setTime] = useState(new Date());
-  useEffect(() => {
-    const t = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  return <span className="font-mono text-sm text-gray-500">{format(time, 'HH:mm:ss')}</span>;
-}
-
-const ROLE_COLORS: Record<string, string> = {
-  admin:        'bg-red-100 text-red-700',
-  manager:      'bg-purple-100 text-purple-700',
-  receptionist: 'bg-blue-100 text-blue-700',
-  housekeeping: 'bg-green-100 text-green-700',
-};
-
 export default function DashboardPage() {
-  const { user, logout } = useAuthStore();
-  const { theme, toggleTheme } = useUIStore();
-  const navigate = useNavigate();
-  const [notifOpen, setNotifOpen]     = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [notifications, setNotifications] = useState(mockNotifications);
-  const unread = notifications.length;
+  const user = useAuthStore((state) => state.user);
+  const [now, setNow] = useState(() => new Date());
 
-  const greeting = () => {
-    const h = new Date().getHours();
-    if (h < 12) return 'Good Morning';
-    if (h < 17) return 'Good Afternoon';
-    return 'Good Evening';
-  };
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   return (
-    <div className="min-h-screen relative">
-
-      {/* ── Background Slideshow ── */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <HotelSlideshow interval={4000} showLabel={false} overlay={false} />
-        <div className="absolute inset-0 bg-white/30 backdrop-blur-[1px]" />
-      </div>
-
-      {/* ── Sticky Header ── */}
-      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm">
-        <div className="flex items-center justify-between px-5 py-3">
-          <div>
-            <h1 className="text-base font-bold text-gray-800">Reception Dashboard</h1>
-            <p className="text-xs text-gray-400">{format(new Date(), 'EEEE, dd MMMM yyyy')}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {user && (
-              <span className={cn('hidden sm:inline-flex px-2.5 py-1 rounded-full text-xs font-semibold capitalize', ROLE_COLORS[user.role] ?? 'bg-gray-100')}>
-                {user.role}
-              </span>
-            )}
-            <motion.button whileTap={{ scale: 0.9 }} onClick={toggleTheme}
-              className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
-              {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-            </motion.button>
-
-            {/* Notifications bell */}
-            <div className="relative">
-              <motion.button whileTap={{ scale: 0.9 }}
-                onClick={() => { setNotifOpen((o) => !o); setProfileOpen(false); }}
-                className="relative w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
-                <Bell className="w-4 h-4" />
-                {unread > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                    {unread}
-                  </span>
-                )}
-              </motion.button>
-              <AnimatePresence>
-                {notifOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
-                    <motion.div
-                      initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                      className="absolute right-0 top-11 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden"
-                    >
-                      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                        <h3 className="font-semibold text-sm">Notifications</h3>
-                        <button onClick={() => setNotifications([])} className="text-xs text-blue-600 hover:underline">Clear all</button>
-                      </div>
-                      <div className="max-h-72 overflow-y-auto divide-y divide-gray-50">
-                        {notifications.length === 0 ? (
-                          <p className="text-center text-sm text-gray-400 py-8">All caught up!</p>
-                        ) : notifications.map((n) => (
-                          <div key={n.id} className="flex gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
-                            <NotifIcon type={n.type} />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold text-gray-800">{n.title}</p>
-                              <p className="text-xs text-gray-400 truncate">{n.message}</p>
-                              <p className="text-[10px] text-gray-300 mt-0.5">{n.time}</p>
-                            </div>
-                            <button onClick={() => setNotifications((p) => p.filter((x) => x.id !== n.id))}
-                              className="text-gray-300 hover:text-red-400 shrink-0">
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
+    <motion.div
+      variants={stagger}
+      initial="hidden"
+      animate="show"
+      className="relative z-10 min-h-screen space-y-5 p-5 lg:p-6"
+    >
+      <motion.section
+        variants={fadeUp}
+        className="rounded-3xl border border-white/16 bg-slate-950/64 p-5 text-white shadow-2xl shadow-black/20 backdrop-blur-2xl"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-cyan-400/14 p-3 text-cyan-100 ring-1 ring-cyan-300/20">
+              <Hotel className="h-6 w-6" />
             </div>
-
-            {/* Profile dropdown */}
-            <div className="relative">
-              <motion.button whileTap={{ scale: 0.95 }}
-                onClick={() => { setProfileOpen((o) => !o); setNotifOpen(false); }}
-                className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors">
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs">
-                  {user?.name[0] ?? 'A'}
-                </div>
-                <div className="hidden sm:block text-left">
-                  <p className="text-xs font-semibold text-gray-800 leading-tight">{user?.name ?? 'User'}</p>
-                  <p className="text-[10px] text-gray-400 capitalize">{user?.role}</p>
-                </div>
-                <ChevronDown className="w-3 h-3 text-gray-400" />
-              </motion.button>
-              <AnimatePresence>
-                {profileOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
-                    <motion.div
-                      initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                      className="absolute right-0 top-11 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden"
-                    >
-                      <div className="p-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
-                        <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center font-bold mb-2">
-                          {user?.name[0]}
-                        </div>
-                        <p className="font-semibold text-sm">{user?.name}</p>
-                        <p className="text-white/70 text-xs capitalize">{user?.role}</p>
-                      </div>
-                      {[
-                        { label: 'Dashboard',    icon: Menu,       path: '/'            },
-                        { label: 'Bookings',     icon: FileText,   path: '/bookings'    },
-                        { label: 'Housekeeping', icon: Sparkles,   path: '/housekeeping'},
-                        { label: 'Reports',      icon: FileText,   path: '/reports'     },
-                      ].map(({ label, icon: Icon, path }) => (
-                        <button key={label}
-                          onClick={() => { navigate(path); setProfileOpen(false); }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
-                          <Icon className="w-4 h-4 text-gray-400" />
-                          {label}
-                        </button>
-                      ))}
-                      <div className="border-t border-gray-100">
-                        <button onClick={logout}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors">
-                          <LogOut className="w-4 h-4" />
-                          Sign Out
-                        </button>
-                      </div>
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Page Content ── */}
-      <div className="relative z-10 p-5 space-y-6">
-
-        {/* Welcome Banner */}
-        <motion.div variants={fadeUp} initial="hidden" animate="show"
-          className="rounded-2xl bg-white/90 backdrop-blur-md shadow-lg p-6 border border-white/50">
-          <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h2 className="text-2xl font-bold text-gray-800">
-                {greeting()}, {user?.name?.split(' ')[0] ?? 'Angela'} 👋
-              </h2>
-              <p className="text-gray-500 text-sm mt-1">Here's what's happening at your hotel today.</p>
-              <div className="flex items-center gap-2 mt-2">
-                <LiveClock />
-                <span className="text-gray-300">·</span>
-                <span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold capitalize', ROLE_COLORS[user?.role ?? 'receptionist'])}>
-                  {user?.role ?? 'Receptionist'}
-                </span>
-              </div>
-            </div>
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl px-6 py-3 border border-blue-100 text-right">
-              <p className="text-4xl font-bold text-blue-600">{mockStats.occupancyRate}%</p>
-              <p className="text-gray-400 text-sm">Occupancy Rate</p>
-              <p className="text-xs text-green-500 font-medium mt-0.5">↑ 12% vs yesterday</p>
+              <p className="text-sm text-cyan-50/68">StaySync Hotel Management</p>
+              <h2 className="mt-1 text-2xl font-bold">{greetingFor(now)}, {user?.name?.split(' ')[0] ?? 'Angela'}</h2>
+              <p className="mt-1 text-sm text-cyan-50/70">Reception Dashboard - {formatDateTime(now)}</p>
             </div>
           </div>
 
-          <div className="mt-4">
-            <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-              <motion.div
-                className="h-full bg-gradient-to-r from-blue-400 via-blue-500 to-indigo-600 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${mockStats.occupancyRate}%` }}
-                transition={{ duration: 1.5, ease: 'easeOut', delay: 0.3 }}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative min-w-64">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/55" />
+              <input
+                placeholder="Search guest, room, booking..."
+                className="h-10 w-full rounded-2xl border border-white/15 bg-white/12 pl-9 pr-3 text-sm text-white placeholder:text-white/50 outline-none transition focus:border-cyan-200/50"
               />
             </div>
-            <div className="flex justify-between mt-1.5 text-xs text-gray-400">
-              <span>{mockStats.occupiedRooms} occupied</span>
-              <span>{mockStats.availableRooms} available of {mockStats.totalRooms}</span>
+            <div className="flex items-center gap-2 rounded-2xl bg-white/12 px-3 py-2">
+              <UserCheck className="h-4 w-4 text-emerald-300" />
+              <div>
+                <p className="text-xs text-white/60">Logged in as</p>
+                <p className="text-sm font-semibold capitalize">{user?.role ?? 'receptionist'}</p>
+              </div>
             </div>
           </div>
+        </div>
+      </motion.section>
 
-          {/* Quick Actions — navigate to pages */}
-          <div className="mt-5">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Quick Actions</p>
-            <div className="flex gap-2 flex-wrap">
-              {[
-                { label: 'New Booking',      icon: Plus,       color: 'bg-blue-500   hover:bg-blue-600',   path: '/bookings'     },
-                { label: 'Check In Guest',   icon: UserCheck,  color: 'bg-green-500  hover:bg-green-600',  path: '/bookings'     },
-                { label: 'Check Out Guest',  icon: UserX,      color: 'bg-orange-500 hover:bg-orange-600', path: '/bookings'     },
-                { label: 'Housekeeping',     icon: Sparkles,   color: 'bg-amber-500  hover:bg-amber-600',  path: '/housekeeping' },
-                { label: 'Reports',          icon: FileText,   color: 'bg-purple-500 hover:bg-purple-600', path: '/reports'      },
-                { label: 'Tape Chart',       icon: Calendar,   color: 'bg-teal-500   hover:bg-teal-600',   path: '/tape-chart'   },
-              ].map(({ label, icon: Icon, color, path }) => (
-                <motion.button
-                  key={label}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => navigate(path)}
-                  className={cn('flex items-center gap-2 px-4 py-2 rounded-xl text-white text-xs font-semibold transition-colors shadow-sm', color)}
-                >
-                  <Icon className="w-3.5 h-3.5" />
+      <motion.div variants={stagger} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <KpiCard label="Rooms Occupied" value={mockStats.occupiedRooms} sub={`${mockStats.occupancyRate}% occupancy`} icon={<BedDouble className="h-5 w-5" />} className="bg-gradient-to-br from-blue-600 to-indigo-700" />
+        <KpiCard label="Available Rooms" value={mockStats.availableRooms} sub="Ready for booking" icon={<CheckCircle2 className="h-5 w-5" />} className="bg-gradient-to-br from-emerald-500 to-teal-700" />
+        <KpiCard label="Check-ins Today" value={mockStats.checkInsToday} sub="Guests arriving" icon={<LogIn className="h-5 w-5" />} className="bg-gradient-to-br from-cyan-500 to-blue-700" />
+        <KpiCard label="Check-outs Today" value={mockStats.checkOutsToday} sub="Guests leaving" icon={<LogOut className="h-5 w-5" />} className="bg-gradient-to-br from-rose-500 to-red-700" />
+        <KpiCard label="Revenue Today" value={`KES ${mockStats.revenueToday.toLocaleString()}`} sub="Front desk sales" icon={<Banknote className="h-5 w-5" />} className="bg-gradient-to-br from-amber-500 to-orange-700" />
+        <KpiCard label="Pending Payments" value={mockStats.pendingPayments} sub="Unpaid bills" icon={<CreditCard className="h-5 w-5" />} className="bg-gradient-to-br from-slate-600 to-slate-900" />
+      </motion.div>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <SectionCard className="xl:col-span-2">
+          <SectionTitle title="Operational Shortcuts" subtitle="Open dedicated pages for detailed work" icon={<CalendarDays className="h-4 w-4" />} />
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <Link to="/bookings" className="rounded-2xl border border-blue-100 bg-blue-50 p-4 transition hover:-translate-y-0.5 hover:shadow-lg">
+              <LogIn className="mb-3 h-5 w-5 text-blue-600" />
+              <p className="font-semibold text-slate-900">Bookings</p>
+              <p className="mt-1 text-xs text-slate-500">Reservations, check-ins, check-outs, analytics, and recent bookings.</p>
+            </Link>
+            <Link to="/housekeeping" className="rounded-2xl border border-amber-100 bg-amber-50 p-4 transition hover:-translate-y-0.5 hover:shadow-lg">
+              <Sparkles className="mb-3 h-5 w-5 text-amber-600" />
+              <p className="font-semibold text-slate-900">Housekeeping</p>
+              <p className="mt-1 text-xs text-slate-500">Cleaning queues, room readiness, staff assignment, and maintenance.</p>
+            </Link>
+            <Link to="/tape-chart" className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 transition hover:-translate-y-0.5 hover:shadow-lg">
+              <BedDouble className="mb-3 h-5 w-5 text-emerald-600" />
+              <p className="font-semibold text-slate-900">Tape Chart</p>
+              <p className="mt-1 text-xs text-slate-500">Room occupancy timeline and availability planning.</p>
+            </Link>
+          </div>
+
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Quick Actions</p>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+              {quickActions.map(({ label, to, icon: Icon, className }) => (
+                <Link key={label} to={to} className={cn('flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold text-white transition', className)}>
+                  <Icon className="h-4 w-4" />
                   {label}
-                </motion.button>
+                </Link>
               ))}
             </div>
           </div>
-        </motion.div>
+        </SectionCard>
 
-       
-
-        
-        {/* Middle Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-  <div className="lg:col-span-1">
-
-          <motion.div variants={fadeUp} initial="hidden" animate="show"
-            className="bg-white/90 backdrop-blur-md rounded-2xl p-5 shadow-sm border border-white/50">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-800">Alerts</h3>
-              <Bell className="w-4 h-4 text-gray-400" />
-            </div>
-            <div className="space-y-2">
-              {mockNotifications.map((n) => (
-                <motion.div key={n.id} whileHover={{ x: 3 }}
-                  className="flex gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer">
-                  <NotifIcon type={n.type} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-gray-800">{n.title}</p>
-                    <p className="text-xs text-gray-400 truncate">{n.message}</p>
-                    <p className="text-[10px] text-gray-300 mt-0.5">{n.time}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-        </div>
-
-        {/* Bottom Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-       
-
-          <div className="space-y-4">
-            <motion.div variants={fadeUp} initial="hidden" animate="show"
-              className="bg-white/90 backdrop-blur-md rounded-2xl p-5 shadow-sm border border-white/50">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-gray-800">Today's Arrivals</h3>
-                <span className="text-xs bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full font-semibold">
-                  {mockArrivals.length} guests
-                </span>
-              </div>
-              <div className="space-y-2">
-                {mockArrivals.map((a) => (
-                  <motion.div key={a.id} whileHover={{ scale: 1.02 }}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-blue-50 cursor-pointer border border-blue-100"
-                    onClick={() => navigate('/bookings')}>
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                      {a.guest[0]}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{a.guest}</p>
-                      <p className="text-xs text-gray-400">Room {a.room} · {a.nights} nights</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-blue-600">{a.time}</p>
-                      <p className="text-[10px] text-gray-400">ETA</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-
-           
-          </div>
-        </div>
-
-        {/* Mini Calendar — compact */}
-        <motion.div variants={fadeUp} initial="hidden" animate="show"
-          className="bg-white/90 backdrop-blur-md rounded-2xl p-5 shadow-sm border border-white/50">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-blue-500" />
-              <h3 className="font-semibold text-gray-800">Reservations — May 2026</h3>
-            </div>
-            <button onClick={() => navigate('/bookings')} className="text-xs text-blue-600 hover:underline">View all</button>
-          </div>
-
-          {/* Compact calendar — max-w to prevent it being too wide */}
-          <div className="max-w-sm">
-            <div className="grid grid-cols-7 gap-1 mb-1">
-              {['S','M','T','W','T','F','S'].map((d, i) => (
-                <div key={i} className="text-center text-[11px] font-bold text-gray-400">{d}</div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-              {Array.from({ length: 31 }, (_, i) => {
-                const day        = i + 1;
-                const hasBooking = [13,14,15,17,20,21,22,25,27,28].includes(day);
-                const isToday    = day === 19;
-                const isPast     = day < 19;
-                return (
-                  <motion.div key={day} whileHover={{ scale: 1.2 }}
-                    className={cn(
-                      'w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold cursor-pointer transition-colors mx-auto',
-                      isToday    ? 'bg-blue-500 text-white shadow-md' :
-                      hasBooking ? 'bg-blue-100 text-blue-700'        :
-                      isPast     ? 'text-gray-300'                    :
-                                   'hover:bg-gray-100 text-gray-600'
-                    )}>
-                    {day}
-                  </motion.div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex gap-4 mt-3">
-            {[
-              { color: 'bg-blue-500', label: 'Today'        },
-              { color: 'bg-blue-100', label: 'Has bookings' },
-              { color: 'bg-gray-200', label: 'Past'         },
-            ].map(({ color, label }) => (
-              <div key={label} className="flex items-center gap-1.5">
-                <div className={cn('w-3 h-3 rounded-full', color)} />
-                <span className="text-xs text-gray-400">{label}</span>
+        <SectionCard>
+          <SectionTitle title="Notifications" subtitle="Front desk alerts" icon={<Bell className="h-4 w-4" />} />
+          <div className="space-y-3">
+            {mockNotifications.slice(0, 5).map((notification) => (
+              <div key={notification.id} className="flex gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                <AlertCircle className={cn('mt-0.5 h-4 w-4 shrink-0', notification.type === 'error' && 'text-red-500', notification.type === 'warning' && 'text-amber-500', notification.type === 'success' && 'text-emerald-500', notification.type === 'info' && 'text-blue-500')} />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800">{notification.title}</p>
+                  <p className="truncate text-xs text-slate-500">{notification.message}</p>
+                  <p className="mt-1 text-[11px] text-slate-400">{notification.time}</p>
+                </div>
               </div>
             ))}
           </div>
-        </motion.div>
-
+        </SectionCard>
       </div>
-    </div>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <SectionCard>
+          <SectionTitle title="Reservation Calendar" subtitle="Upcoming busy dates" icon={<CalendarDays className="h-4 w-4" />} />
+          <div className="space-y-3">
+            {[
+              { day: '20', label: 'High occupancy', value: '88%' },
+              { day: '21', label: 'Group arrival', value: '18 rooms' },
+              { day: '22', label: 'Peak checkout', value: '24 guests' },
+            ].map((item) => (
+              <div key={item.day} className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-sm font-bold text-white">{item.day}</div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-slate-800">{item.label}</p>
+                  <p className="text-xs text-slate-500">May 2026</p>
+                </div>
+                <span className="text-xs font-semibold text-blue-700">{item.value}</span>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+
+        <SectionCard className="xl:col-span-2">
+          <SectionTitle title="Today's Arrivals" subtitle="Guests expected at the property" icon={<LogIn className="h-4 w-4" />} />
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {mockArrivals.map((arrival) => (
+              <div key={arrival.id} className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                <p className="text-sm font-semibold text-slate-800">{arrival.guest}</p>
+                <p className="mt-1 text-xs text-slate-500">Room {arrival.room} - {arrival.nights} night{arrival.nights > 1 ? 's' : ''}</p>
+                <p className="mt-3 text-sm font-bold text-blue-700">{arrival.time} ETA</p>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      </div>
+    </motion.div>
   );
 }

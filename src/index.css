@@ -1,63 +1,98 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #0c1a2e;
-  --color-foreground: #e2eaf4;
-  --color-card: rgba(255,255,255,0.08);
-  --color-card-foreground: #e2eaf4;
-  --color-primary: #0284c7;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #1e3a5f;
-  --color-secondary-foreground: #e2eaf4;
-  --color-muted: #1e3a5f;
-  --color-muted-foreground: #7a9cc0;
-  --color-accent: rgba(255,255,255,0.1);
-  --color-accent-foreground: #e2eaf4;
+  --color-background: #071425;
+  --color-foreground: #e7eef8;
+  --color-card: rgba(255,255,255,0.1);
+  --color-card-foreground: #e7eef8;
+  --color-primary: #22d3ee;
+  --color-primary-foreground: #06202a;
+  --color-secondary: rgba(255,255,255,0.12);
+  --color-secondary-foreground: #e7eef8;
+  --color-muted: rgba(255,255,255,0.12);
+  --color-muted-foreground: #a9bfd7;
+  --color-accent: rgba(255,255,255,0.12);
+  --color-accent-foreground: #ffffff;
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
-  --color-border: rgba(255,255,255,0.15);
-  --color-input: rgba(255,255,255,0.15);
-  --color-ring: #0284c7;
+  --color-border: rgba(255,255,255,0.16);
+  --color-input: rgba(255,255,255,0.18);
+  --color-ring: #22d3ee;
 }
 
 * {
   border-color: var(--color-border);
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   width: 100%;
-  height: 100%;
-  background: #0c1a2e;
+  min-height: 100%;
+  background: #071425;
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
+  margin: 0;
   color: var(--color-foreground);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  text-rendering: geometricPrecision;
 }
 
-/* Sidebar ocean blue gradient */
-aside {
-  background: linear-gradient(180deg, #0369a1 0%, #0c1a2e 100%) !important;
-  border-color: rgba(255,255,255,0.1) !important;
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
 }
 
-aside span, aside p {
-  color: #e0f2fe !important;
+button,
+a {
+  cursor: pointer;
 }
 
-aside .text-muted-foreground {
-  color: #bae6fd !important;
+input,
+select,
+textarea {
+  color: #0f172a;
 }
 
-/* Header glass effect */
-header {
-  background: rgba(12, 26, 46, 0.85) !important;
-  backdrop-filter: blur(12px) !important;
-  border-color: rgba(255,255,255,0.1) !important;
+::selection {
+  background: rgba(34, 211, 238, 0.35);
 }
 
-header h1 {
-  color: #e2eaf4 !important;
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.05);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,0.45);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(34,211,238,0.7);
+  background-clip: content-box;
+}
+
+.dark body {
+  background: #030712;
+}
+
+@media (max-width: 768px) {
+  main > div {
+    max-width: 100%;
+  }
 }

@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -90,6 +91,52 @@ function SectionCard({ title, subtitle, icon, children, className }: { title: st
 }
 
 export default function ReportsPage() {
+  const [dateRange, setDateRange] = useState('month');
+  const [roomType, setRoomType] = useState('all');
+  const [bookingStatus, setBookingStatus] = useState('all');
+  const [paymentFilter, setPaymentFilter] = useState('all');
+
+  const rangeMultiplier = useMemo(() => ({ today: 0.15, week: 0.52, month: 1, year: 5.1 })[dateRange] ?? 1, [dateRange]);
+  const adjustedRevenue = Math.round(mockStats.revenueToday * rangeMultiplier);
+  const monthlyRevenueData = mockMonthlyRevenue.map((item) => ({ ...item, revenue: Math.round(item.revenue * rangeMultiplier) }));
+  const bookingTrendData = bookingTrend.map((item) => ({
+    ...item,
+    completed: bookingStatus === 'all' || bookingStatus === 'completed' ? item.completed : 0,
+    pending: bookingStatus === 'all' || bookingStatus === 'pending' ? item.pending : 0,
+    cancelled: bookingStatus === 'all' || bookingStatus === 'cancelled' ? item.cancelled : 0,
+  }));
+  const paymentStatusData = paymentStatus.filter((item) => paymentFilter === 'all' || item.name.toLowerCase() === paymentFilter);
+  const revenueByRoomTypeData = revenueByRoomType.filter((item) => roomType === 'all' || item.type.toLowerCase() === roomType);
+
+  const downloadReport = (filename: string, content: string, type: string) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportExcel = () => {
+    const rows = [
+      ['Report', 'Value'],
+      ['Date Range', dateRange],
+      ['Room Type', roomType],
+      ['Booking Status', bookingStatus],
+      ['Payment Status', paymentFilter],
+      ['Revenue', adjustedRevenue],
+      ['Occupancy Rate', mockStats.occupancyRate + '%'],
+      ['Occupied Rooms', mockStats.occupiedRooms],
+      ['Available Rooms', mockStats.availableRooms],
+    ];
+    downloadReport('staysync-report.csv', rows.map((row) => row.join(',')).join('\n'), 'text/csv;charset=utf-8');
+  };
+
+  const exportPdf = () => {
+    window.print();
+  };
+
   const completedBookings = mockRecentBookings.filter((booking) => booking.status === 'checked_in' || booking.status === 'checked_out').length;
   const pendingBookings = mockRecentBookings.filter((booking) => booking.status === 'pending' || booking.status === 'confirmed').length;
   const cancelledBookings = 2;
@@ -106,15 +153,15 @@ export default function ReportsPage() {
           <p className="text-white/70 text-sm">Revenue, booking, guest, and room analytics for management</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-lg hover:bg-red-700">
+          <button onClick={exportPdf} className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-lg hover:bg-red-700">
             <FileText className="w-4 h-4" />
             Export PDF
           </button>
-          <button className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-lg hover:bg-emerald-700">
+          <button onClick={exportExcel} className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-lg hover:bg-emerald-700">
             <FileSpreadsheet className="w-4 h-4" />
             Export Excel
           </button>
-          <button className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-700 px-4 text-sm font-semibold text-white shadow-lg hover:bg-slate-800">
+          <button onClick={() => window.print()} className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-700 px-4 text-sm font-semibold text-white shadow-lg hover:bg-slate-800">
             <Printer className="w-4 h-4" />
             Print Report
           </button>
@@ -125,56 +172,56 @@ export default function ReportsPage() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           <label className="space-y-1">
             <span className="flex items-center gap-1 text-xs font-semibold text-gray-500"><CalendarDays className="w-3.5 h-3.5" />Date Range</span>
-            <select className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200">
-              <option>This Month</option>
-              <option>Today</option>
-              <option>This Week</option>
-              <option>This Year</option>
+            <select value={dateRange} onChange={(event) => setDateRange(event.target.value)} className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200">
+              <option value="month">This Month</option>
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="year">This Year</option>
             </select>
           </label>
           <label className="space-y-1">
             <span className="flex items-center gap-1 text-xs font-semibold text-gray-500"><BedDouble className="w-3.5 h-3.5" />Room Type</span>
-            <select className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200">
-              <option>All Room Types</option>
-              <option>Standard</option>
-              <option>Deluxe</option>
-              <option>Suite</option>
-              <option>Penthouse</option>
+            <select value={roomType} onChange={(event) => setRoomType(event.target.value)} className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200">
+              <option value="all">All Room Types</option>
+              <option value="standard">Standard</option>
+              <option value="deluxe">Deluxe</option>
+              <option value="suite">Suite</option>
+              <option value="penthouse">Penthouse</option>
             </select>
           </label>
           <label className="space-y-1">
             <span className="flex items-center gap-1 text-xs font-semibold text-gray-500"><Filter className="w-3.5 h-3.5" />Booking Status</span>
-            <select className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200">
-              <option>All Statuses</option>
-              <option>Completed</option>
-              <option>Cancelled</option>
-              <option>Pending</option>
+            <select value={bookingStatus} onChange={(event) => setBookingStatus(event.target.value)} className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200">
+              <option value="all">All Statuses</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="pending">Pending</option>
             </select>
           </label>
           <label className="space-y-1">
             <span className="flex items-center gap-1 text-xs font-semibold text-gray-500"><Receipt className="w-3.5 h-3.5" />Payment Status</span>
-            <select className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200">
-              <option>All Payments</option>
-              <option>Paid</option>
-              <option>Pending</option>
-              <option>Partial</option>
+            <select value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)} className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200">
+              <option value="all">All Payments</option>
+              <option value="paid">Paid</option>
+              <option value="pending">Pending</option>
+              <option value="partial">Partial</option>
             </select>
           </label>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <ReportCard label="Daily Revenue" value={`KES ${mockStats.revenueToday.toLocaleString()}`} sub="Today" icon={<TrendingUp className="w-5 h-5" />} className="bg-gradient-to-br from-blue-600 to-indigo-700" />
-        <ReportCard label="Weekly Revenue" value="KES 1.42M" sub="Last 7 days" icon={<BarChart3 className="w-5 h-5" />} className="bg-gradient-to-br from-emerald-500 to-teal-700" />
-        <ReportCard label="Monthly Revenue" value="KES 1.68M" sub="May performance" icon={<Receipt className="w-5 h-5" />} className="bg-gradient-to-br from-amber-500 to-orange-700" />
-        <ReportCard label="Yearly Revenue" value="KES 8.42M" sub="Year to date" icon={<Download className="w-5 h-5" />} className="bg-gradient-to-br from-slate-600 to-slate-900" />
+        <ReportCard label="Daily Revenue" value={'KES ' + adjustedRevenue.toLocaleString()} sub="Today" icon={<TrendingUp className="w-5 h-5" />} className="bg-gradient-to-br from-blue-600 to-indigo-700" />
+        <ReportCard label="Weekly Revenue" value={'KES ' + Math.round(adjustedRevenue * 5.8).toLocaleString()} sub="Last 7 days" icon={<BarChart3 className="w-5 h-5" />} className="bg-gradient-to-br from-emerald-500 to-teal-700" />
+        <ReportCard label="Monthly Revenue" value={'KES ' + Math.round(adjustedRevenue * 6.8).toLocaleString()} sub="May performance" icon={<Receipt className="w-5 h-5" />} className="bg-gradient-to-br from-amber-500 to-orange-700" />
+        <ReportCard label="Yearly Revenue" value={'KES ' + Math.round(adjustedRevenue * 34.4).toLocaleString()} sub="Year to date" icon={<Download className="w-5 h-5" />} className="bg-gradient-to-br from-slate-600 to-slate-900" />
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <SectionCard title="Monthly Revenue" subtitle="Bar chart revenue performance" icon={<BarChart3 className="w-4 h-4" />} className="xl:col-span-2">
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mockMonthlyRevenue}>
+              <BarChart data={monthlyRevenueData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => `${Number(value) / 1000}k`} />
@@ -216,7 +263,7 @@ export default function ReportsPage() {
         <SectionCard title="Booking Trends" subtitle="Line graph for completed, pending, and cancelled bookings" icon={<TrendingUp className="w-4 h-4" />}>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={bookingTrend}>
+              <LineChart data={bookingTrendData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="day" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -233,8 +280,8 @@ export default function ReportsPage() {
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={paymentStatus} cx="50%" cy="50%" innerRadius={64} outerRadius={92} paddingAngle={4} dataKey="value">
-                  {paymentStatus.map((entry) => (
+                <Pie data={paymentStatusData} cx="50%" cy="50%" innerRadius={64} outerRadius={92} paddingAngle={4} dataKey="value">
+                  {paymentStatusData.map((entry) => (
                     <Cell key={entry.name} fill={entry.color} />
                   ))}
                 </Pie>
@@ -276,7 +323,7 @@ export default function ReportsPage() {
 
         <SectionCard title="Revenue by Room Type" subtitle="Top earning room categories" icon={<Receipt className="w-4 h-4" />}>
           <div className="space-y-3">
-            {revenueByRoomType.map((item) => (
+            {revenueByRoomTypeData.map((item) => (
               <div key={item.type}>
                 <div className="mb-1 flex justify-between text-sm">
                   <span className="text-gray-600">{item.type}</span>
