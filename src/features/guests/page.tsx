@@ -15,179 +15,20 @@ import {
   Trash2,
   UserRound,
   Users,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useGuestStore } from '@/app/store/guestStore';
-import type { ApiGuest } from '@/lib/protectedEndpoints';
-
-const INITIAL_GUESTS = [
-  {
-    guestId: 'GST-001',
-    fullName: 'James Odhiambo',
-    gender: 'Male',
-    nationality: 'Kenyan',
-    phone: '+254712345678',
-    email: 'james@email.com',
-    idNumber: 'KE123456',
-    address: 'Westlands, Nairobi',
-    bookingId: 'BK-2041',
-    roomNumber: '301',
-    roomType: 'Suite',
-    checkIn: '2026-05-18',
-    checkOut: '2026-05-21',
-    numberOfGuests: 2,
-    bookingStatus: 'checked_in',
-    paymentStatus: 'paid',
-    amountPaid: 45000,
-    balance: 0,
-    paymentMethod: 'M-Pesa',
-    stayHistory: 3,
-    previousBookings: ['BK-1190', 'BK-1578'],
-    vip: true,
-    notes: 'Prefers quiet rooms and late checkout.',
-  },
-  {
-    guestId: 'GST-002',
-    fullName: 'Amina Hassan',
-    gender: 'Female',
-    nationality: 'Somali',
-    phone: '+254723456789',
-    email: 'amina@email.com',
-    idNumber: 'SO789012',
-    address: 'Kilimani, Nairobi',
-    bookingId: 'BK-2042',
-    roomNumber: '205',
-    roomType: 'Deluxe Twin',
-    checkIn: '2026-05-19',
-    checkOut: '2026-05-23',
-    numberOfGuests: 1,
-    bookingStatus: 'reserved',
-    paymentStatus: 'partial',
-    amountPaid: 12000,
-    balance: 8000,
-    paymentMethod: 'Card',
-    stayHistory: 1,
-    previousBookings: [],
-    vip: false,
-    notes: 'Airport pickup requested.',
-  },
-  {
-    guestId: 'GST-003',
-    fullName: 'Brian Mutua',
-    gender: 'Male',
-    nationality: 'Kenyan',
-    phone: '+254734567890',
-    email: 'brian@email.com',
-    idNumber: 'KE234567',
-    address: 'Nyali, Mombasa',
-    bookingId: 'BK-2043',
-    roomNumber: '401',
-    roomType: 'Penthouse',
-    checkIn: '2026-05-20',
-    checkOut: '2026-05-25',
-    numberOfGuests: 3,
-    bookingStatus: 'reserved',
-    paymentStatus: 'pending',
-    amountPaid: 0,
-    balance: 89000,
-    paymentMethod: 'Pending',
-    stayHistory: 5,
-    previousBookings: ['BK-0975', 'BK-1412', 'BK-1880'],
-    vip: true,
-    notes: 'VIP guest. Prepare welcome package.',
-  },
-  {
-    guestId: 'GST-004',
-    fullName: 'Grace Wanjiru',
-    gender: 'Female',
-    nationality: 'Kenyan',
-    phone: '+254745678901',
-    email: 'grace@email.com',
-    idNumber: 'KE345678',
-    address: 'Lavington, Nairobi',
-    bookingId: 'BK-2044',
-    roomNumber: '108',
-    roomType: 'Standard King',
-    checkIn: '2026-05-13',
-    checkOut: '2026-05-18',
-    numberOfGuests: 1,
-    bookingStatus: 'checked_out',
-    paymentStatus: 'paid',
-    amountPaid: 34000,
-    balance: 0,
-    paymentMethod: 'Cash',
-    stayHistory: 2,
-    previousBookings: ['BK-1510'],
-    vip: false,
-    notes: 'Requested invoice by email.',
-  },
-  {
-    guestId: 'GST-005',
-    fullName: 'Peter Otieno',
-    gender: 'Male',
-    nationality: 'Kenyan',
-    phone: '+254756789012',
-    email: 'peter@email.com',
-    idNumber: 'KE456789',
-    address: 'Kisumu CBD',
-    bookingId: 'BK-2045',
-    roomNumber: '110',
-    roomType: 'Standard King',
-    checkIn: '2026-05-17',
-    checkOut: '2026-05-19',
-    numberOfGuests: 2,
-    bookingStatus: 'cancelled',
-    paymentStatus: 'pending',
-    amountPaid: 0,
-    balance: 18000,
-    paymentMethod: 'Pending',
-    stayHistory: 4,
-    previousBookings: ['BK-1231', 'BK-1664'],
-    vip: false,
-    notes: 'Cancelled due to travel delay.',
-  },
-];
-
-type Guest = (typeof INITIAL_GUESTS)[number];
-
-function mapApiGuest(guest: ApiGuest): Guest {
-  const booking = guest.bookings?.[0];
-  const firstName = guest.first_name ?? '';
-  const lastName = guest.last_name ?? '';
-  const fullName = [firstName, lastName].filter(Boolean).join(' ') || `Guest ${guest.id}`;
-
-  return {
-    guestId: `GST-${String(guest.id).padStart(3, '0')}`,
-    fullName,
-    gender: '',
-    nationality: guest.country ?? '',
-    phone: guest.phone ?? '',
-    email: guest.email ?? '',
-    idNumber: guest.id_number ?? '',
-    address: guest.address ?? '',
-    bookingId: booking?.booking_reference ?? '',
-    roomNumber: booking?.room?.room_number ?? '',
-    roomType: booking?.room?.room_type?.name ?? booking?.room?.roomType?.name ?? '',
-    checkIn: booking?.check_in_date ? String(booking.check_in_date).slice(0, 10) : '',
-    checkOut: booking?.check_out_date ? String(booking.check_out_date).slice(0, 10) : '',
-    numberOfGuests: (booking?.num_adults ?? 0) + (booking?.num_children ?? 0),
-    bookingStatus: booking?.status ?? 'reserved',
-    paymentStatus: 'pending',
-    amountPaid: 0,
-    balance: Number(booking?.total_price ?? 0),
-    paymentMethod: 'Pending',
-    stayHistory: guest.total_stays ?? guest.bookings?.length ?? 0,
-    previousBookings: guest.bookings?.slice(1).map((item) => item.booking_reference) ?? [],
-    vip: false,
-    notes: '',
-  };
-}
+import { createGuest, deleteGuest, updateGuest, type ApiGuest } from '@/lib/protectedEndpoints';
 
 const BOOKING_STATUS_STYLES: Record<string, string> = {
   checked_in: 'bg-emerald-100 text-emerald-700',
   reserved: 'bg-blue-100 text-blue-700',
+  pending: 'bg-blue-100 text-blue-700',
+  confirmed: 'bg-blue-100 text-blue-700',
   checked_out: 'bg-slate-100 text-slate-700',
   cancelled: 'bg-red-100 text-red-700',
+  no_show: 'bg-red-100 text-red-700',
 };
 
 const PAYMENT_STATUS_STYLES: Record<string, string> = {
@@ -209,6 +50,69 @@ function StatusBadge({ status, type }: { status: string; type: 'booking' | 'paym
   );
 }
 
+interface Guest {
+  numericId: number;
+  guestId: string;
+  fullName: string;
+  firstName: string;
+  lastName: string;
+  gender: string;
+  nationality: string;
+  phone: string;
+  email: string;
+  idType: string;
+  idNumber: string;
+  address: string;
+  bookingId: string;
+  roomNumber: string;
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  bookingStatus: string;
+  paymentStatus: string;
+  amountPaid: number;
+  balance: number;
+  paymentMethod: string;
+  stayHistory: number;
+  previousBookings: string[];
+  notes: string;
+}
+
+function mapApiGuest(guest: ApiGuest): Guest {
+  const booking = guest.bookings?.[0];
+  const firstName = guest.first_name ?? '';
+  const lastName = guest.last_name ?? '';
+  const fullName = [firstName, lastName].filter(Boolean).join(' ') || `Guest ${guest.id}`;
+
+  return {
+    numericId: guest.id,
+    guestId: `GST-${String(guest.id).padStart(3, '0')}`,
+    fullName,
+    firstName,
+    lastName,
+    gender: guest.gender ?? '',
+    nationality: guest.nationality ?? '',
+    phone: guest.phone ?? '',
+    email: guest.email ?? '',
+    idType: guest.id_type ?? '',
+    idNumber: guest.id_number ?? '',
+    address: guest.address ?? '',
+    bookingId: booking?.booking_reference ?? '',
+    roomNumber: booking?.room?.room_number ?? '',
+    roomType: booking?.room?.room_type?.name ?? booking?.room?.roomType?.name ?? '',
+    checkIn: booking?.check_in_date ? String(booking.check_in_date).slice(0, 10) : '',
+    checkOut: booking?.check_out_date ? String(booking.check_out_date).slice(0, 10) : '',
+    bookingStatus: booking?.status ?? 'reserved',
+    paymentStatus: 'pending',
+    amountPaid: 0,
+    balance: Number(booking?.total_price ?? 0),
+    paymentMethod: 'Pending',
+    stayHistory: guest.total_stays ?? guest.bookings?.length ?? 0,
+    previousBookings: guest.bookings?.slice(1).map((item) => item.booking_reference) ?? [],
+    notes: '',
+  };
+}
+
 function StatCard({ label, value, icon, className }: { label: string; value: string | number; icon: React.ReactNode; className: string }) {
   return (
     <div className={cn('rounded-2xl p-4 text-white shadow-lg', className)}>
@@ -221,24 +125,161 @@ function StatCard({ label, value, icon, className }: { label: string; value: str
   );
 }
 
+interface GuestFormState {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  gender: string;
+  nationality: string;
+  idType: string;
+  idNumber: string;
+  address: string;
+  city: string;
+  country: string;
+}
+
+const emptyForm: GuestFormState = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  gender: '',
+  nationality: '',
+  idType: '',
+  idNumber: '',
+  address: '',
+  city: '',
+  country: '',
+};
+
+function GuestFormModal({ open, initial, onClose, onSave }: { open: boolean; initial: GuestFormState; onClose: () => void; onSave: (form: GuestFormState) => Promise<void> }) {
+  const [form, setForm] = useState<GuestFormState>(initial);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setForm(initial);
+      setErr('');
+    }
+  }, [open, initial]);
+
+  if (!open) return null;
+
+  const handle = async () => {
+    if (!form.firstName.trim() || !form.lastName.trim()) {
+      setErr('First and last name are required.');
+      return;
+    }
+    setBusy(true);
+    setErr('');
+    try {
+      await onSave(form);
+      onClose();
+    } catch (e) {
+      setErr((e as { message?: string })?.message ?? 'Save failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+          <h3 className="text-base font-bold text-slate-900">Guest details</h3>
+          <button onClick={onClose} className="rounded-full bg-slate-100 p-1 text-slate-500 hover:bg-slate-200">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="space-y-3 px-5 py-4">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              First name
+              <input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal" />
+            </label>
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              Last name
+              <input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal" />
+            </label>
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              Phone
+              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal" />
+            </label>
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              Email
+              <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal" />
+            </label>
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              Gender
+              <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })} className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal">
+                <option value="">—</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              Nationality
+              <input value={form.nationality} onChange={(e) => setForm({ ...form, nationality: e.target.value })} className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal" />
+            </label>
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              ID type
+              <select value={form.idType} onChange={(e) => setForm({ ...form, idType: e.target.value })} className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal">
+                <option value="">—</option>
+                <option value="passport">Passport</option>
+                <option value="national_id">National ID</option>
+                <option value="driver_license">Driver License</option>
+              </select>
+            </label>
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              ID number
+              <input value={form.idNumber} onChange={(e) => setForm({ ...form, idNumber: e.target.value })} className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal" />
+            </label>
+            <label className="col-span-2 space-y-1 text-xs font-semibold text-slate-600">
+              Address
+              <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal" />
+            </label>
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              City
+              <input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal" />
+            </label>
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              Country
+              <input value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal" />
+            </label>
+          </div>
+          {err && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{err}</p>}
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+          <button onClick={onClose} className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-100">Cancel</button>
+          <button onClick={handle} disabled={busy} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-60">
+            {busy ? 'Saving…' : 'Save guest'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GuestsPage() {
   const apiGuests = useGuestStore((state) => state.guests);
+  const storeError = useGuestStore((state) => state.error);
   const fetchApiGuests = useGuestStore((state) => state.fetchGuests);
-  const [guests, setGuests] = useState<Guest[]>(INITIAL_GUESTS);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [notice, setNotice] = useState('');
   const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Guest | null>(null);
+
+  const guests: Guest[] = useMemo(() => apiGuests.map(mapApiGuest), [apiGuests]);
 
   useEffect(() => {
     void fetchApiGuests();
   }, [fetchApiGuests]);
-
-  useEffect(() => {
-    if (apiGuests.length > 0) {
-      setGuests(apiGuests.map(mapApiGuest));
-    }
-  }, [apiGuests]);
 
   const filteredGuests = guests.filter((guest) => {
     const query = search.toLowerCase();
@@ -246,34 +287,71 @@ export default function GuestsPage() {
       guest.fullName.toLowerCase().includes(query) ||
       guest.roomNumber.includes(search) ||
       guest.guestId.toLowerCase().includes(query) ||
-      guest.bookingId.toLowerCase().includes(query);
+      guest.bookingId.toLowerCase().includes(query) ||
+      guest.phone.includes(search);
     const matchesStatus = statusFilter === 'all' || guest.bookingStatus === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
+  const today = new Date().toISOString().slice(0, 10);
   const stats = useMemo(() => ({
     total: guests.length,
     checkedIn: guests.filter((guest) => guest.bookingStatus === 'checked_in').length,
-    todayCheckIns: guests.filter((guest) => guest.checkIn === '2026-05-20').length,
-    todayCheckOuts: guests.filter((guest) => guest.checkOut === '2026-05-20').length,
-    vip: guests.filter((guest) => guest.vip).length,
-  }), [guests]);
+    todayCheckIns: guests.filter((guest) => guest.checkIn === today).length,
+    todayCheckOuts: guests.filter((guest) => guest.checkOut === today).length,
+  }), [guests, today]);
 
   const showNotice = (message: string) => {
     setNotice(message);
     window.setTimeout(() => setNotice(''), 3500);
   };
 
-  const updateGuestStatus = (guestId: string, status: Guest['bookingStatus']) => {
-    setGuests((prev) => prev.map((guest) => guest.guestId === guestId ? { ...guest, bookingStatus: status } : guest));
+  const handleAddGuest = () => {
+    setEditing(null);
+    setModalOpen(true);
   };
 
-  const handleAddGuest = () => showNotice('Add New Guest is ready for a backend form connection.');
-  const handleEdit = (guest: Guest) => { setSelectedGuest(guest); showNotice(`Editing ${guest.fullName}.`); };
-  const handleDelete = (guest: Guest) => { setGuests((prev) => prev.filter((item) => item.guestId !== guest.guestId)); showNotice(`${guest.fullName} was removed from the guest list.`); };
-  const handleBooking = (guest: Guest) => { setSelectedGuest(guest); showNotice(`Viewing booking ${guest.bookingId}.`); };
-  const handleCheckIn = (guest: Guest) => { updateGuestStatus(guest.guestId, 'checked_in'); showNotice(`${guest.fullName} has been checked in.`); };
-  const handleCheckOut = (guest: Guest) => { updateGuestStatus(guest.guestId, 'checked_out'); showNotice(`${guest.fullName} has been checked out.`); };
+  const handleEdit = (guest: Guest) => {
+    setEditing(guest);
+    setModalOpen(true);
+  };
+
+  const handleSave = async (form: GuestFormState) => {
+    const payload: Record<string, unknown> = { ...form };
+    if (editing) {
+      await updateGuest(editing.numericId, payload);
+      showNotice(`${form.firstName} ${form.lastName} updated.`);
+    } else {
+      await createGuest(payload);
+      showNotice(`${form.firstName} ${form.lastName} added to the guest list.`);
+    }
+    await fetchApiGuests();
+  };
+
+  const handleDelete = async (guest: Guest) => {
+    if (!window.confirm(`Remove ${guest.fullName} from the guest list?`)) return;
+    try {
+      await deleteGuest(guest.numericId);
+      showNotice(`${guest.fullName} was removed from the guest list.`);
+      await fetchApiGuests();
+    } catch (err) {
+      showNotice(`Delete failed: ${(err as { message?: string })?.message ?? 'unknown'}`);
+    }
+  };
+
+  const handleBooking = (guest: Guest) => {
+    setSelectedGuest(guest);
+    showNotice(`Viewing booking ${guest.bookingId || 'none'}.`);
+  };
+
+  const handleCheckIn = (guest: Guest) => {
+    showNotice(`Use the Tape Chart to check ${guest.fullName} in (requires a booking).`);
+  };
+
+  const handleCheckOut = (guest: Guest) => {
+    showNotice(`Use the Tape Chart to check ${guest.fullName} out (requires a booking).`);
+  };
+
   const handleInvoice = (guest: Guest) => showNotice(`Invoice prepared for ${guest.fullName}: KES ${(guest.amountPaid + guest.balance).toLocaleString()}.`);
 
   return (
@@ -289,12 +367,11 @@ export default function GuestsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="Total Guests" value={stats.total} icon={<Users className="w-5 h-5" />} className="bg-gradient-to-br from-blue-500 to-indigo-700" />
         <StatCard label="Checked In" value={stats.checkedIn} icon={<LogIn className="w-5 h-5" />} className="bg-gradient-to-br from-emerald-500 to-teal-700" />
-        <StatCard label="Today's Check-ins" value={stats.todayCheckIns} icon={<CalendarDays className="w-5 h-5" />} className="bg-gradient-to-br from-cyan-500 to-blue-700" />
-        <StatCard label="Today's Check-outs" value={stats.todayCheckOuts} icon={<LogOut className="w-5 h-5" />} className="bg-gradient-to-br from-rose-500 to-red-700" />
-        <StatCard label="VIP Guests" value={stats.vip} icon={<BadgeCheck className="w-5 h-5" />} className="bg-gradient-to-br from-amber-500 to-orange-700" />
+        <StatCard label={`Check-ins (${today})`} value={stats.todayCheckIns} icon={<CalendarDays className="w-5 h-5" />} className="bg-gradient-to-br from-cyan-500 to-blue-700" />
+        <StatCard label={`Check-outs (${today})`} value={stats.todayCheckOuts} icon={<LogOut className="w-5 h-5" />} className="bg-gradient-to-br from-rose-500 to-red-700" />
       </div>
 
       <div className="rounded-2xl bg-white p-4 shadow-sm">
@@ -304,13 +381,13 @@ export default function GuestsPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by guest name, room number, guest ID, or booking ID..."
+              placeholder="Search by guest name, room number, guest ID, phone, or booking ID..."
               className="h-10 w-full rounded-xl border border-gray-200 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-200"
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Filter className="w-4 h-4 text-gray-400" />
-            {['all', 'checked_in', 'reserved', 'checked_out', 'cancelled'].map((status) => (
+            {['all', 'checked_in', 'confirmed', 'pending', 'checked_out', 'cancelled'].map((status) => (
               <button
                 key={status}
                 onClick={() => setStatusFilter(status)}
@@ -326,6 +403,11 @@ export default function GuestsPage() {
         </div>
       </div>
 
+      {storeError && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-700 shadow-sm">
+          {storeError}
+        </div>
+      )}
       {notice && (
         <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm font-semibold text-blue-700 shadow-sm">
           {notice}
@@ -337,8 +419,8 @@ export default function GuestsPage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="font-bold text-gray-900">{selectedGuest.fullName}</p>
-              <p className="mt-1">Booking {selectedGuest.bookingId} - Room {selectedGuest.roomNumber} - {formatStatus(selectedGuest.bookingStatus)}</p>
-              <p className="mt-1 text-gray-500">{selectedGuest.notes}</p>
+              <p className="mt-1">Booking {selectedGuest.bookingId || '—'} - Room {selectedGuest.roomNumber || '—'} - {formatStatus(selectedGuest.bookingStatus)}</p>
+              <p className="mt-1 text-gray-500">{selectedGuest.phone} · {selectedGuest.email}</p>
             </div>
             <button onClick={() => setSelectedGuest(null)} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-200">Close</button>
           </div>
@@ -358,14 +440,14 @@ export default function GuestsPage() {
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-base font-bold text-gray-900">{guest.fullName}</h3>
-                        {guest.vip && (
+                        {guest.stayHistory >= 3 && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
                             <BadgeCheck className="w-3 h-3" />
-                            VIP
+                            Returning
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400">{guest.guestId} - {guest.gender} - {guest.nationality}</p>
+                      <p className="text-xs text-gray-400">{guest.guestId} · {guest.gender || '—'} · {guest.nationality || '—'}</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -378,20 +460,19 @@ export default function GuestsPage() {
                   <div className="rounded-xl bg-gray-50 p-3">
                     <p className="mb-2 text-xs font-semibold uppercase text-gray-400">Guest Information</p>
                     <div className="space-y-2 text-sm text-gray-600">
-                      <p className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-gray-400" />{guest.phone}</p>
-                      <p className="flex items-center gap-2"><Mail className="w-3.5 h-3.5 text-gray-400" />{guest.email}</p>
-                      <p>ID/Passport: <span className="font-semibold text-gray-800">{guest.idNumber}</span></p>
-                      <p>Address: {guest.address}</p>
+                      <p className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-gray-400" />{guest.phone || '—'}</p>
+                      <p className="flex items-center gap-2"><Mail className="w-3.5 h-3.5 text-gray-400" />{guest.email || '—'}</p>
+                      <p>ID: <span className="font-semibold text-gray-800">{guest.idType ? `${guest.idType.toUpperCase()} ` : ''}{guest.idNumber || '—'}</span></p>
+                      <p>Address: {guest.address || '—'}</p>
                     </div>
                   </div>
 
                   <div className="rounded-xl bg-blue-50 p-3">
                     <p className="mb-2 text-xs font-semibold uppercase text-blue-400">Booking Details</p>
                     <div className="space-y-2 text-sm text-blue-800">
-                      <p>Booking ID: <span className="font-semibold">{guest.bookingId}</span></p>
-                      <p>Room {guest.roomNumber} - {guest.roomType}</p>
-                      <p>{guest.checkIn} to {guest.checkOut}</p>
-                      <p>{guest.numberOfGuests} guest{guest.numberOfGuests > 1 ? 's' : ''}</p>
+                      <p>Booking ID: <span className="font-semibold">{guest.bookingId || '—'}</span></p>
+                      <p>Room {guest.roomNumber || '—'} {guest.roomType ? `· ${guest.roomType}` : ''}</p>
+                      <p>{guest.checkIn || '—'} to {guest.checkOut || '—'}</p>
                     </div>
                   </div>
 
@@ -409,7 +490,6 @@ export default function GuestsPage() {
                     <div className="space-y-2 text-sm text-amber-800">
                       <p>Stay history: <span className="font-semibold">{guest.stayHistory}</span> stays</p>
                       <p>Previous: {guest.previousBookings.length ? guest.previousBookings.join(', ') : 'None'}</p>
-                      <p className="italic">{guest.notes}</p>
                     </div>
                   </div>
                 </div>
@@ -448,9 +528,28 @@ export default function GuestsPage() {
 
       {filteredGuests.length === 0 && (
         <div className="rounded-2xl bg-white p-8 text-center text-sm text-gray-500 shadow-sm">
-          No guests match the selected search or filter.
+          {guests.length === 0 ? 'No guests yet. Add a guest to get started.' : 'No guests match the selected search or filter.'}
         </div>
       )}
+
+      <GuestFormModal
+        open={modalOpen}
+        initial={editing ? {
+          firstName: editing.firstName,
+          lastName: editing.lastName,
+          email: editing.email,
+          phone: editing.phone,
+          gender: editing.gender,
+          nationality: editing.nationality,
+          idType: editing.idType,
+          idNumber: editing.idNumber,
+          address: editing.address,
+          city: '',
+          country: '',
+        } : emptyForm}
+        onClose={() => setModalOpen(false)}
+        onSave={handleSave}
+      />
     </div>
   );
 }

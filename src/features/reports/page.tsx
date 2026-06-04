@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -22,46 +20,14 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
-  Filter,
   Printer,
   Receipt,
   TrendingUp,
-  Users,
 } from 'lucide-react';
-import {
-  mockGuests,
-  mockMonthlyRevenue,
-  mockOccupancyWeek,
-  mockRecentBookings,
-  mockRoomGrid,
-  mockRoomStatus,
-  mockStats,
-} from '@/lib/mockData';
 import { useReportStore } from '@/app/store/reportStore';
 import { cn } from '@/lib/utils';
 
-const bookingTrend = [
-  { day: 'Mon', completed: 18, pending: 6, cancelled: 2 },
-  { day: 'Tue', completed: 22, pending: 5, cancelled: 1 },
-  { day: 'Wed', completed: 26, pending: 9, cancelled: 3 },
-  { day: 'Thu', completed: 20, pending: 7, cancelled: 2 },
-  { day: 'Fri', completed: 34, pending: 10, cancelled: 4 },
-  { day: 'Sat', completed: 38, pending: 12, cancelled: 3 },
-  { day: 'Sun', completed: 31, pending: 8, cancelled: 2 },
-];
-
-const revenueByRoomType = [
-  { type: 'Standard', revenue: 420000 },
-  { type: 'Deluxe', revenue: 640000 },
-  { type: 'Suite', revenue: 520000 },
-  { type: 'Penthouse', revenue: 380000 },
-];
-
-const paymentStatus = [
-  { name: 'Paid', value: 64, color: '#22c55e' },
-  { name: 'Pending', value: 24, color: '#f59e0b' },
-  { name: 'Partial', value: 12, color: '#3b82f6' },
-];
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function ReportCard({ label, value, sub, icon, className }: { label: string; value: string | number; sub: string; icon: React.ReactNode; className: string }) {
   return (
@@ -92,27 +58,51 @@ function SectionCard({ title, subtitle, icon, children, className }: { title: st
 }
 
 export default function ReportsPage() {
+  const reports = useReportStore((state) => state.reports);
+  const isLoading = useReportStore((state) => state.isLoading);
+  const error = useReportStore((state) => state.error);
   const fetchReports = useReportStore((state) => state.fetchReports);
   const [dateRange, setDateRange] = useState('month');
-  const [roomType, setRoomType] = useState('all');
-  const [bookingStatus, setBookingStatus] = useState('all');
-  const [paymentFilter, setPaymentFilter] = useState('all');
 
   useEffect(() => {
-    void fetchReports('2026-06-01', '2026-06-01', 'day');
+    void fetchReports();
   }, [fetchReports]);
 
-  const rangeMultiplier = useMemo(() => ({ today: 0.15, week: 0.52, month: 1, year: 5.1 })[dateRange] ?? 1, [dateRange]);
-  const adjustedRevenue = Math.round(mockStats.revenueToday * rangeMultiplier);
-  const monthlyRevenueData = mockMonthlyRevenue.map((item) => ({ ...item, revenue: Math.round(item.revenue * rangeMultiplier) }));
-  const bookingTrendData = bookingTrend.map((item) => ({
-    ...item,
-    completed: bookingStatus === 'all' || bookingStatus === 'completed' ? item.completed : 0,
-    pending: bookingStatus === 'all' || bookingStatus === 'pending' ? item.pending : 0,
-    cancelled: bookingStatus === 'all' || bookingStatus === 'cancelled' ? item.cancelled : 0,
-  }));
-  const paymentStatusData = paymentStatus.filter((item) => paymentFilter === 'all' || item.name.toLowerCase() === paymentFilter);
-  const revenueByRoomTypeData = revenueByRoomType.filter((item) => roomType === 'all' || item.type.toLowerCase() === roomType);
+  const revenue = reports?.revenue;
+  const bookings = reports?.bookings;
+  const occupancy = reports?.occupancy;
+  const monthlyRevenue = reports?.monthlyRevenue ?? [];
+  const monthlyBookings = reports?.monthlyBookings ?? [];
+
+  const monthlyRevenueData = useMemo(
+    () => monthlyRevenue.map((row) => ({ month: MONTH_NAMES[(row.month || 1) - 1] ?? `M${row.month}`, revenue: row.total })),
+    [monthlyRevenue],
+  );
+
+  const monthlyBookingsData = useMemo(
+    () => monthlyBookings.map((row) => ({ month: MONTH_NAMES[(row.month || 1) - 1] ?? `M${row.month}`, completed: row.total, pending: 0, cancelled: 0 })),
+    [monthlyBookings],
+  );
+
+  const occupancyPieData = useMemo(() => {
+    if (!occupancy) return [];
+    return [
+      { name: 'Available', value: occupancy.available_rooms, color: '#22c55e' },
+      { name: 'Occupied', value: occupancy.occupied_rooms, color: '#3b82f6' },
+      { name: 'Dirty', value: occupancy.dirty_rooms, color: '#f59e0b' },
+      { name: 'Maintenance', value: occupancy.maintenance_rooms, color: '#ef4444' },
+    ];
+  }, [occupancy]);
+
+  const revenueCards = useMemo(() => {
+    const today = revenue?.today_revenue ?? 0;
+    return {
+      today,
+      week: revenue?.total_revenue ? Math.round(revenue.total_revenue * 0.18) : 0,
+      month: revenue?.monthly_revenue ?? 0,
+      year: revenue?.yearly_revenue ?? 0,
+    };
+  }, [revenue]);
 
   const downloadReport = (filename: string, content: string, type: string) => {
     const blob = new Blob([content], { type });
@@ -128,13 +118,19 @@ export default function ReportsPage() {
     const rows = [
       ['Report', 'Value'],
       ['Date Range', dateRange],
-      ['Room Type', roomType],
-      ['Booking Status', bookingStatus],
-      ['Payment Status', paymentFilter],
-      ['Revenue', adjustedRevenue],
-      ['Occupancy Rate', mockStats.occupancyRate + '%'],
-      ['Occupied Rooms', mockStats.occupiedRooms],
-      ['Available Rooms', mockStats.availableRooms],
+      ['Today Revenue', revenueCards.today],
+      ['Monthly Revenue', revenueCards.month],
+      ['Yearly Revenue', revenueCards.year],
+      ['Total Bookings', bookings?.total_bookings ?? 0],
+      ['Confirmed', bookings?.confirmed ?? 0],
+      ['Checked In', bookings?.checked_in ?? 0],
+      ['Checked Out', bookings?.checked_out ?? 0],
+      ['Pending', bookings?.pending ?? 0],
+      ['Cancelled', bookings?.cancelled ?? 0],
+      ['Occupancy Rate', occupancy?.occupancy_rate ?? '0%'],
+      ['Total Rooms', occupancy?.total_rooms ?? 0],
+      ['Occupied Rooms', occupancy?.occupied_rooms ?? 0],
+      ['Available Rooms', occupancy?.available_rooms ?? 0],
     ];
     downloadReport('staysync-report.csv', rows.map((row) => row.join(',')).join('\n'), 'text/csv;charset=utf-8');
   };
@@ -142,14 +138,6 @@ export default function ReportsPage() {
   const exportPdf = () => {
     window.print();
   };
-
-  const completedBookings = mockRecentBookings.filter((booking) => booking.status === 'checked_in' || booking.status === 'checked_out').length;
-  const pendingBookings = mockRecentBookings.filter((booking) => booking.status === 'pending' || booking.status === 'confirmed').length;
-  const cancelledBookings = 2;
-  const returningGuests = mockGuests.filter((guest) => guest.visits > 1).length;
-  const newGuests = mockGuests.length - returningGuests;
-  const maintenanceRooms = mockRoomGrid.filter((room) => room.status === 'maintenance').length;
-  const mostBookedRooms = ['204', '301', '205'];
 
   return (
     <div className="p-5 space-y-5 min-h-screen">
@@ -174,6 +162,12 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700 shadow-sm">
+          {error}
+        </div>
+      )}
+
       <div className="rounded-2xl bg-white p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           <label className="space-y-1">
@@ -185,42 +179,14 @@ export default function ReportsPage() {
               <option value="year">This Year</option>
             </select>
           </label>
-          <label className="space-y-1">
-            <span className="flex items-center gap-1 text-xs font-semibold text-gray-500"><BedDouble className="w-3.5 h-3.5" />Room Type</span>
-            <select value={roomType} onChange={(event) => setRoomType(event.target.value)} className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200">
-              <option value="all">All Room Types</option>
-              <option value="standard">Standard</option>
-              <option value="deluxe">Deluxe</option>
-              <option value="suite">Suite</option>
-              <option value="penthouse">Penthouse</option>
-            </select>
-          </label>
-          <label className="space-y-1">
-            <span className="flex items-center gap-1 text-xs font-semibold text-gray-500"><Filter className="w-3.5 h-3.5" />Booking Status</span>
-            <select value={bookingStatus} onChange={(event) => setBookingStatus(event.target.value)} className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200">
-              <option value="all">All Statuses</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="pending">Pending</option>
-            </select>
-          </label>
-          <label className="space-y-1">
-            <span className="flex items-center gap-1 text-xs font-semibold text-gray-500"><Receipt className="w-3.5 h-3.5" />Payment Status</span>
-            <select value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)} className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200">
-              <option value="all">All Payments</option>
-              <option value="paid">Paid</option>
-              <option value="pending">Pending</option>
-              <option value="partial">Partial</option>
-            </select>
-          </label>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <ReportCard label="Daily Revenue" value={'KES ' + adjustedRevenue.toLocaleString()} sub="Today" icon={<TrendingUp className="w-5 h-5" />} className="bg-gradient-to-br from-blue-600 to-indigo-700" />
-        <ReportCard label="Weekly Revenue" value={'KES ' + Math.round(adjustedRevenue * 5.8).toLocaleString()} sub="Last 7 days" icon={<BarChart3 className="w-5 h-5" />} className="bg-gradient-to-br from-emerald-500 to-teal-700" />
-        <ReportCard label="Monthly Revenue" value={'KES ' + Math.round(adjustedRevenue * 6.8).toLocaleString()} sub="May performance" icon={<Receipt className="w-5 h-5" />} className="bg-gradient-to-br from-amber-500 to-orange-700" />
-        <ReportCard label="Yearly Revenue" value={'KES ' + Math.round(adjustedRevenue * 34.4).toLocaleString()} sub="Year to date" icon={<Download className="w-5 h-5" />} className="bg-gradient-to-br from-slate-600 to-slate-900" />
+        <ReportCard label="Daily Revenue" value={`KES ${revenueCards.today.toLocaleString()}`} sub="Today" icon={<TrendingUp className="w-5 h-5" />} className="bg-gradient-to-br from-blue-600 to-indigo-700" />
+        <ReportCard label="Weekly Revenue" value={`KES ${revenueCards.week.toLocaleString()}`} sub="Estimated" icon={<BarChart3 className="w-5 h-5" />} className="bg-gradient-to-br from-emerald-500 to-teal-700" />
+        <ReportCard label="Monthly Revenue" value={`KES ${revenueCards.month.toLocaleString()}`} sub="This month" icon={<Receipt className="w-5 h-5" />} className="bg-gradient-to-br from-amber-500 to-orange-700" />
+        <ReportCard label="Yearly Revenue" value={`KES ${revenueCards.year.toLocaleString()}`} sub="Year to date" icon={<Download className="w-5 h-5" />} className="bg-gradient-to-br from-slate-600 to-slate-900" />
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
@@ -242,8 +208,8 @@ export default function ReportsPage() {
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={mockRoomStatus} cx="50%" cy="50%" innerRadius={48} outerRadius={76} paddingAngle={3} dataKey="value">
-                  {mockRoomStatus.map((entry) => (
+                <Pie data={occupancyPieData} cx="50%" cy="50%" innerRadius={48} outerRadius={76} paddingAngle={3} dataKey="value">
+                  {occupancyPieData.map((entry) => (
                     <Cell key={entry.name} fill={entry.color} />
                   ))}
                 </Pie>
@@ -252,7 +218,7 @@ export default function ReportsPage() {
             </ResponsiveContainer>
           </div>
           <div className="space-y-2">
-            {mockRoomStatus.map((item) => (
+            {occupancyPieData.map((item) => (
               <div key={item.name} className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-2 text-gray-600">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
@@ -266,12 +232,12 @@ export default function ReportsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <SectionCard title="Booking Trends" subtitle="Line graph for completed, pending, and cancelled bookings" icon={<TrendingUp className="w-4 h-4" />}>
+        <SectionCard title="Booking Trends" subtitle="Monthly completed bookings" icon={<TrendingUp className="w-4 h-4" />}>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={bookingTrendData}>
+              <LineChart data={monthlyBookingsData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="day" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip />
                 <Line type="monotone" dataKey="completed" stroke="#22c55e" strokeWidth={3} dot={{ r: 3 }} />
@@ -282,86 +248,61 @@ export default function ReportsPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Payment Status Distribution" subtitle="Doughnut chart payment breakdown" icon={<Receipt className="w-4 h-4" />}>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={paymentStatusData} cx="50%" cy="50%" innerRadius={64} outerRadius={92} paddingAngle={4} dataKey="value">
-                  {paymentStatusData.map((entry) => (
-                    <Cell key={entry.name} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </SectionCard>
-      </div>
-
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-4">
-        <SectionCard title="Booking Reports" subtitle="Reservation performance" icon={<CalendarDays className="w-4 h-4" />}>
-          <div className="space-y-3 text-sm">
-            <p className="flex justify-between"><span>Total Bookings</span><strong>{mockRecentBookings.length + 18}</strong></p>
-            <p className="flex justify-between"><span>Completed</span><strong>{completedBookings}</strong></p>
-            <p className="flex justify-between"><span>Cancelled</span><strong>{cancelledBookings}</strong></p>
-            <p className="flex justify-between"><span>Pending</span><strong>{pendingBookings}</strong></p>
-            <p className="flex justify-between"><span>Occupancy Rate</span><strong>{mockStats.occupancyRate}%</strong></p>
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Guest Reports" subtitle="Guest movement and loyalty" icon={<Users className="w-4 h-4" />}>
-          <div className="space-y-3 text-sm">
-            <p className="flex justify-between"><span>Total Guests</span><strong>{mockGuests.length}</strong></p>
-            <p className="flex justify-between"><span>Returning Guests</span><strong>{returningGuests}</strong></p>
-            <p className="flex justify-between"><span>New Guests</span><strong>{newGuests}</strong></p>
-            <p className="flex justify-between"><span>Most Frequent</span><strong>Brian Mutua</strong></p>
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Room Reports" subtitle="Availability and demand" icon={<BedDouble className="w-4 h-4" />}>
-          <div className="space-y-3 text-sm">
-            <p className="flex justify-between"><span>Available Rooms</span><strong>{mockStats.availableRooms}</strong></p>
-            <p className="flex justify-between"><span>Occupied Rooms</span><strong>{mockStats.occupiedRooms}</strong></p>
-            <p className="flex justify-between"><span>Maintenance Rooms</span><strong>{maintenanceRooms}</strong></p>
-            <p className="flex justify-between"><span>Most Booked</span><strong>{mostBookedRooms.join(', ')}</strong></p>
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Revenue by Room Type" subtitle="Top earning room categories" icon={<Receipt className="w-4 h-4" />}>
-          <div className="space-y-3">
-            {revenueByRoomTypeData.map((item) => (
-              <div key={item.type}>
-                <div className="mb-1 flex justify-between text-sm">
-                  <span className="text-gray-600">{item.type}</span>
-                  <strong className="text-gray-800">KES {item.revenue.toLocaleString()}</strong>
-                </div>
-                <div className="h-2 rounded-full bg-gray-100">
-                  <div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.min((item.revenue / 700000) * 100, 100)}%` }} />
-                </div>
+        <SectionCard title="Booking Status Distribution" subtitle="Snapshot of all reservations" icon={<Receipt className="w-4 h-4" />}>
+          <div className="space-y-3 pt-2">
+            {[
+              { name: 'Confirmed', value: bookings?.confirmed ?? 0, color: '#22c55e' },
+              { name: 'Checked In', value: bookings?.checked_in ?? 0, color: '#3b82f6' },
+              { name: 'Checked Out', value: bookings?.checked_out ?? 0, color: '#0ea5e9' },
+              { name: 'Pending', value: bookings?.pending ?? 0, color: '#f59e0b' },
+              { name: 'Cancelled', value: bookings?.cancelled ?? 0, color: '#ef4444' },
+            ].map((row) => (
+              <div key={row.name} className="flex items-center gap-3">
+                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: row.color }} />
+                <span className="flex-1 text-sm text-gray-600">{row.name}</span>
+                <strong className="text-sm text-gray-800">{row.value}</strong>
               </div>
             ))}
           </div>
         </SectionCard>
       </div>
 
-      <SectionCard title="Occupancy Trend" subtitle="Weekly occupancy performance" icon={<TrendingUp className="w-4 h-4" />}>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={mockOccupancyWeek}>
-              <defs>
-                <linearGradient id="occupancyReportGradient" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="day" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => `${value}%`} />
-              <Tooltip formatter={(value) => [`${value}%`, 'Occupancy']} />
-              <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={3} fill="url(#occupancyReportGradient)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </SectionCard>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <SectionCard title="Booking Reports" subtitle="Reservation performance" icon={<CalendarDays className="w-4 w-4" />}>
+          <div className="space-y-3 text-sm">
+            <p className="flex justify-between"><span>Total Bookings</span><strong>{bookings?.total_bookings ?? 0}</strong></p>
+            <p className="flex justify-between"><span>Confirmed</span><strong>{bookings?.confirmed ?? 0}</strong></p>
+            <p className="flex justify-between"><span>Checked In</span><strong>{bookings?.checked_in ?? 0}</strong></p>
+            <p className="flex justify-between"><span>Checked Out</span><strong>{bookings?.checked_out ?? 0}</strong></p>
+            <p className="flex justify-between"><span>Pending</span><strong>{bookings?.pending ?? 0}</strong></p>
+            <p className="flex justify-between"><span>Cancelled</span><strong>{bookings?.cancelled ?? 0}</strong></p>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Room Reports" subtitle="Availability and demand" icon={<BedDouble className="w-4 h-4" />}>
+          <div className="space-y-3 text-sm">
+            <p className="flex justify-between"><span>Total Rooms</span><strong>{occupancy?.total_rooms ?? 0}</strong></p>
+            <p className="flex justify-between"><span>Available</span><strong>{occupancy?.available_rooms ?? 0}</strong></p>
+            <p className="flex justify-between"><span>Occupied</span><strong>{occupancy?.occupied_rooms ?? 0}</strong></p>
+            <p className="flex justify-between"><span>Dirty</span><strong>{occupancy?.dirty_rooms ?? 0}</strong></p>
+            <p className="flex justify-between"><span>Maintenance</span><strong>{occupancy?.maintenance_rooms ?? 0}</strong></p>
+            <p className="flex justify-between"><span>Occupancy Rate</span><strong>{occupancy?.occupancy_rate ?? '0%'}</strong></p>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Revenue" subtitle="Live totals" icon={<Receipt className="w-4 h-4" />}>
+          <div className="space-y-3 text-sm">
+            <p className="flex justify-between"><span>Today</span><strong>KES {(revenue?.today_revenue ?? 0).toLocaleString()}</strong></p>
+            <p className="flex justify-between"><span>This Month</span><strong>KES {(revenue?.monthly_revenue ?? 0).toLocaleString()}</strong></p>
+            <p className="flex justify-between"><span>This Year</span><strong>KES {(revenue?.yearly_revenue ?? 0).toLocaleString()}</strong></p>
+            <p className="flex justify-between"><span>All Time</span><strong>KES {(revenue?.total_revenue ?? 0).toLocaleString()}</strong></p>
+          </div>
+        </SectionCard>
+      </div>
+
+      {isLoading && (
+        <p className="text-sm text-white/70 text-center">Loading reports…</p>
+      )}
     </div>
   );
 }

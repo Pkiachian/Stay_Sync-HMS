@@ -50,10 +50,22 @@ export interface GuestData {
 export interface BookingData {
     guest_id: number;
     room_id: number;
+    room_type_id: number;
     check_in: string;
     check_out: string;
     adults: number;
     children?: number;
+    notes?: string;
+}
+
+export interface BookingUpdateData {
+    room_id?: number;
+    room_type_id?: number;
+    check_in?: string;
+    check_out?: string;
+    adults?: number;
+    children?: number;
+    status?: 'pending' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled' | 'no_show';
     notes?: string;
 }
 
@@ -149,10 +161,38 @@ export const deleteGuest = (id: number, token: string)                    => req
 
 // ─── Bookings ─────────────────────────────────────────────────────────────────
 
+// Frontend uses BookingData with friendly field names; Laravel expects
+// snake_case booking fields. Translate once at the boundary.
+function mapBookingPayload(data: BookingData): Record<string, unknown> {
+    return {
+        guest_id: data.guest_id,
+        room_id: data.room_id,
+        room_type_id: data.room_type_id,
+        check_in_date: data.check_in,
+        check_out_date: data.check_out,
+        num_adults: data.adults,
+        num_children: data.children ?? 0,
+        special_requests: data.notes ?? null,
+    };
+}
+
+function mapBookingUpdatePayload(data: BookingUpdateData): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    if (data.room_id !== undefined) out.room_id = data.room_id;
+    if (data.room_type_id !== undefined) out.room_type_id = data.room_type_id;
+    if (data.check_in !== undefined) out.check_in_date = data.check_in;
+    if (data.check_out !== undefined) out.check_out_date = data.check_out;
+    if (data.adults !== undefined) out.num_adults = data.adults;
+    if (data.children !== undefined) out.num_children = data.children;
+    if (data.status !== undefined) out.status = data.status;
+    if (data.notes !== undefined) out.special_requests = data.notes;
+    return out;
+}
+
 export const getBookings        = (token: string)                                   => request('GET',    '/bookings',                 null, token);
 export const getBooking         = (id: number, token: string)                       => request('GET',    `/bookings/${id}`,           null, token);
-export const createBooking      = (data: BookingData, token: string)                => request('POST',   '/bookings',                 data, token);
-export const updateBooking      = (id: number, data: BookingData, token: string)    => request('PUT',    `/bookings/${id}`,           data, token);
+export const createBooking      = (data: BookingData, token: string)                => request('POST',   '/bookings',                 mapBookingPayload(data), token);
+export const updateBooking      = (id: number, data: BookingUpdateData, token: string) => request('PUT',   `/bookings/${id}`,           mapBookingUpdatePayload(data), token);
 export const deleteBooking      = (id: number, token: string)                       => request('DELETE', `/bookings/${id}`,           null, token);
 export const checkIn            = (id: number, token: string)                       => request('POST',   `/bookings/${id}/check-in`,  null, token);
 export const checkOut           = (id: number, token: string)                       => request('POST',   `/bookings/${id}/check-out`, null, token);

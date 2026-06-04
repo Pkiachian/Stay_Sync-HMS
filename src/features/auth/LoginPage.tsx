@@ -6,7 +6,7 @@ import { StaySyncLogo } from '@/components/common/StaySyncLogo';
 
 export default function LoginPage() {
   const { login, isAuthenticated, isLoading, user } = useAuthStore();
-  const [email, setEmail]       = useState('receptionist@hotel.com');
+  const [email, setEmail]       = useState('admin@staysync.test');
   const [password, setPassword] = useState('password');
   const [error, setError]       = useState('');
 
@@ -72,7 +72,7 @@ export default function LoginPage() {
               </button>
             </form>
             <p className="text-xs text-muted-foreground text-center mt-4">
-              Demo: any email/password works.
+              Demo: admin@staysync.test / password
             </p>
           </div>
         </div>

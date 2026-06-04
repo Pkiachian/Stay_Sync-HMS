@@ -19,8 +19,8 @@ import {
   User,
   X,
 } from 'lucide-react';
-import { mockArrivals, mockStats, mockTapeChartRooms } from '@/lib/mockData';
 import { useTapeChartStore } from '@/app/store/tapeChartStore';
+import { cancelBooking, checkInBooking, checkOutBooking, updateBooking, type TapeChartResponse } from '@/lib/protectedEndpoints';
 import { cn } from '@/lib/utils';
 
 const DAYS = 30;
@@ -178,10 +178,38 @@ function Detail({ icon, label, value }: { icon: React.ReactNode; label: string; 
   );
 }
 
+function mapApiToTape(data: TapeChartResponse): Room[] {
+  return data.rooms.map((room) => ({
+    id: room.id,
+    number: room.number,
+    floor: room.floor,
+    type_name: room.type_name,
+    status: room.status,
+    bookings: room.bookings.map((b, idx) => {
+      const inDate = String(b.check_in).slice(0, 10);
+      const outDate = String(b.check_out).slice(0, 10);
+      const nights = Math.max(1, Math.round((new Date(outDate).getTime() - new Date(inDate).getTime()) / 86_400_000));
+      const guestName = b.guest_name ?? (b.guest ? `${b.guest.first_name ?? ''} ${b.guest.last_name ?? ''}`.trim() || 'Guest' : 'Guest');
+      return {
+        id: b.booking_id ?? b.id ?? idx,
+        reference: b.booking_reference ?? b.reference ?? `BK-${(b.booking_id ?? idx)}`,
+        guest_name: guestName,
+        room_id: room.id,
+        check_in: inDate,
+        check_out: outDate,
+        status: b.status,
+        nights,
+      };
+    }),
+  }));
+}
+
 export default function TapeChartPage() {
   const fetchTapeChart = useTapeChartStore((state) => state.fetchTapeChart);
-  const [rooms, setRooms] = useState<Room[]>(mockTapeChartRooms as Room[]);
-  const [startDate, setStartDate] = useState(() => startOfDay(new Date('2026-05-13')));
+  const tapeData = useTapeChartStore((state) => state.data);
+  const tapeError = useTapeChartStore((state) => state.error);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [startDate, setStartDate] = useState(() => startOfDay(new Date()));
   const [selectedBooking, setSelectedBooking] = useState<{ booking: Booking; room: Room } | null>(null);
   const [actionMessage, setActionMessage] = useState('');
   const [roomTypeFilter, setRoomTypeFilter] = useState('all');
@@ -197,6 +225,10 @@ export default function TapeChartPage() {
     void fetchTapeChart(format(startDate, 'yyyy-MM-dd'), format(addDays(startDate, DAYS - 1), 'yyyy-MM-dd'));
   }, [fetchTapeChart, startDate]);
 
+  useEffect(() => {
+    if (tapeData?.rooms) setRooms(mapApiToTape(tapeData));
+  }, [tapeData]);
+
   const filteredRooms = rooms.filter((room) => {
     const matchesType = roomTypeFilter === 'all' || room.type_name === roomTypeFilter;
     const matchesFloor = floorFilter === 'all' || String(room.floor) === floorFilter;
@@ -211,43 +243,69 @@ export default function TapeChartPage() {
     window.setTimeout(() => setActionMessage(''), 3500);
   };
 
-  const handleBookingAction = (action: string) => {
+  const refreshChart = () => {
+    void fetchTapeChart(format(startDate, 'yyyy-MM-dd'), format(addDays(startDate, DAYS - 1), 'yyyy-MM-dd'));
+  };
+
+  const handleBookingAction = async (action: string) => {
     if (!selectedBooking) return;
     const { booking, room } = selectedBooking;
 
     if (action === 'Edit') {
-      showActionMessage(`Editing ${booking.reference}.`);
+      showActionMessage(`Editing ${booking.reference} (not implemented in tape chart).`);
       return;
     }
 
     if (action === 'Move Room') {
       const targetRoom = rooms.find((candidate) => candidate.id !== room.id && candidate.status === 'available') ?? rooms.find((candidate) => candidate.id !== room.id);
-      if (!targetRoom) return;
-      const movedBooking = { ...booking, room_id: targetRoom.id };
-      setRooms((prev) => prev.map((candidate) => {
-        if (candidate.id === room.id) return { ...candidate, bookings: candidate.bookings.filter((item) => item.id !== booking.id) };
-        if (candidate.id === targetRoom.id) return { ...candidate, status: 'reserved', bookings: [...candidate.bookings, movedBooking] };
-        return candidate;
-      }));
-      setSelectedBooking({ booking: movedBooking, room: targetRoom });
-      showActionMessage(`${booking.guest_name} moved to Room ${targetRoom.number}.`);
+      if (!targetRoom) {
+        showActionMessage('No alternate room available to move to.');
+        return;
+      }
+      try {
+        await updateBooking(booking.id, { room_id: targetRoom.id });
+        showActionMessage(`${booking.guest_name} moved to Room ${targetRoom.number}.`);
+        setSelectedBooking(null);
+        refreshChart();
+      } catch (err) {
+        showActionMessage(`Move failed: ${(err as { message?: string })?.message ?? 'unknown'}`);
+      }
       return;
     }
 
-    const nextBooking = { ...booking };
-    if (action === 'Extend Stay') {
-      nextBooking.check_out = format(addDays(new Date(booking.check_out), 1), 'yyyy-MM-dd');
-      nextBooking.nights = booking.nights + 1;
+    try {
+      if (action === 'Extend Stay') {
+        const newCheckout = format(addDays(new Date(booking.check_out), 1), 'yyyy-MM-dd');
+        await updateBooking(booking.id, { check_out: newCheckout });
+        showActionMessage(`Stay extended for ${booking.reference}.`);
+        setSelectedBooking(null);
+        refreshChart();
+        return;
+      }
+      if (action === 'Cancel') {
+        await cancelBooking(booking.id);
+        showActionMessage(`${booking.reference} cancelled.`);
+        setSelectedBooking(null);
+        refreshChart();
+        return;
+      }
+      if (action === 'Check In') {
+        await checkInBooking(booking.id);
+        showActionMessage(`${booking.reference} checked in.`);
+        setSelectedBooking(null);
+        refreshChart();
+        return;
+      }
+      if (action === 'Check Out') {
+        await checkOutBooking(booking.id);
+        showActionMessage(`${booking.reference} checked out.`);
+        setSelectedBooking(null);
+        refreshChart();
+        return;
+      }
+    } catch (err) {
+      showActionMessage(`Action failed: ${(err as { message?: string })?.message ?? 'unknown'}`);
     }
-    if (action === 'Cancel') nextBooking.status = 'cancelled';
-    if (action === 'Check In') nextBooking.status = 'checked_in';
-    if (action === 'Check Out') nextBooking.status = 'checked_out';
-
-    setRooms((prev) => prev.map((candidate) => candidate.id === room.id
-      ? { ...candidate, bookings: candidate.bookings.map((item) => item.id === booking.id ? nextBooking : item) }
-      : candidate));
-    setSelectedBooking({ booking: nextBooking, room });
-    showActionMessage(`${action} applied to ${booking.reference}.`);
   };
 
   const getBookingStyle = (booking: Booking) => {
@@ -272,12 +330,18 @@ export default function TapeChartPage() {
 
   return (
     <div className="flex h-full flex-col gap-4 p-4">
+      {tapeError && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700 shadow-sm">
+          {tapeError}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <SummaryCard label="Occupied Rooms" value={mockStats.occupiedRooms} icon={<BedDouble className="h-5 w-5" />} gradient="from-red-500 to-red-700" />
-        <SummaryCard label="Available Rooms" value={mockStats.availableRooms} icon={<BedDouble className="h-5 w-5" />} gradient="from-emerald-500 to-teal-700" />
-        <SummaryCard label="Today's Arrivals" value={mockArrivals.length} icon={<LogIn className="h-5 w-5" />} gradient="from-blue-500 to-indigo-700" />
-        <SummaryCard label="Today's Departures" value={mockStats.checkOutsToday} icon={<LogOut className="h-5 w-5" />} gradient="from-amber-500 to-orange-700" />
-        <SummaryCard label="Occupancy Rate" value={`${mockStats.occupancyRate}%`} icon={<Sparkles className="h-5 w-5" />} gradient="from-violet-500 to-purple-700" />
+        <SummaryCard label="Occupied Rooms" value={rooms.filter((r) => r.status === 'occupied').length} icon={<BedDouble className="h-5 w-5" />} gradient="from-red-500 to-red-700" />
+        <SummaryCard label="Available Rooms" value={rooms.filter((r) => r.status === 'available').length} icon={<BedDouble className="h-5 w-5" />} gradient="from-emerald-500 to-teal-700" />
+        <SummaryCard label="Reservations" value={rooms.reduce((sum, r) => sum + r.bookings.length, 0)} icon={<LogIn className="h-5 w-5" />} gradient="from-blue-500 to-indigo-700" />
+        <SummaryCard label="Checked-in" value={rooms.reduce((sum, r) => sum + r.bookings.filter((b) => b.status === 'checked_in').length, 0)} icon={<LogOut className="h-5 w-5" />} gradient="from-amber-500 to-orange-700" />
+        <SummaryCard label="Total Rooms" value={rooms.length} icon={<Sparkles className="h-5 w-5" />} gradient="from-violet-500 to-purple-700" />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">

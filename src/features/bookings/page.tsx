@@ -7,11 +7,13 @@ import {
   Hash, Users, Baby, FileText, ChevronDown,UserCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { type ApiBooking } from '@/lib/protectedEndpoints';
+import { type ApiBooking, createBooking, cancelBooking, fetchRooms, fetchGuests, createGuest, type ApiRoom, type ApiGuest } from '@/lib/protectedEndpoints';
 import { useBookingsApiStore } from '@/app/store/bookingsApiStore';
+import { useAuthStore } from '@/app/store/authStore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Booking {
+  numericId: number;
   id: string;
   guestName: string;
   phone: string;
@@ -34,28 +36,18 @@ interface Booking {
   createdAt: string;
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const INITIAL_BOOKINGS: Booking[] = [
-  { id: 'SS-001', guestName: 'James Odhiambo', phone: '+254712345678', email: 'james@email.com',  idNumber: 'KE123456', checkIn: '2026-05-13', checkOut: '2026-05-18', adults: 2, children: 0, roomType: 'Suite',         roomNumber: '301', roomPrice: 15000, totalAmount: 75000, deposit: 25000, taxes: 6750,  paymentMethod: 'Mpesa',       paymentStatus: 'paid',    bookingStatus: 'checked_in',  specialRequests: 'High floor preferred',     createdAt: '2026-05-10' },
-  { id: 'SS-002', guestName: 'Amina Hassan',   phone: '+254723456789', email: 'amina@email.com',  idNumber: 'SO789012', checkIn: '2026-05-19', checkOut: '2026-05-23', adults: 2, children: 1, roomType: 'Deluxe Twin',   roomNumber: '205', roomPrice: 12000, totalAmount: 48000, deposit: 16000, taxes: 4320,  paymentMethod: 'Card',        paymentStatus: 'partial', bookingStatus: 'confirmed',   specialRequests: 'Baby cot needed',          createdAt: '2026-05-12' },
-  { id: 'SS-003', guestName: 'Brian Mutua',    phone: '+254734567890', email: 'brian@email.com',  idNumber: 'KE234567', checkIn: '2026-05-14', checkOut: '2026-05-16', adults: 1, children: 0, roomType: 'Deluxe King',   roomNumber: '201', roomPrice: 12000, totalAmount: 24000, deposit: 24000, taxes: 2160,  paymentMethod: 'Cash',        paymentStatus: 'paid',    bookingStatus: 'checked_in',  specialRequests: '',                          createdAt: '2026-05-13' },
-  { id: 'SS-004', guestName: 'Grace Wanjiru',  phone: '+254745678901', email: 'grace@email.com',  idNumber: 'KE345678', checkIn: '2026-05-13', checkOut: '2026-05-18', adults: 2, children: 2, roomType: 'Suite',         roomNumber: '302', roomPrice: 15000, totalAmount: 75000, deposit: 30000, taxes: 6750,  paymentMethod: 'Bank Transfer',paymentStatus: 'paid',    bookingStatus: 'checked_in',  specialRequests: 'Extra beds for children',  createdAt: '2026-05-11' },
-  { id: 'SS-005', guestName: 'Peter Otieno',   phone: '+254756789012', email: 'peter@email.com',  idNumber: 'KE456789', checkIn: '2026-05-17', checkOut: '2026-05-19', adults: 1, children: 0, roomType: 'Standard King', roomNumber: '110', roomPrice: 8000,  totalAmount: 16000, deposit: 16000, taxes: 1440,  paymentMethod: 'Mpesa',       paymentStatus: 'paid',    bookingStatus: 'checked_out', specialRequests: '',                          createdAt: '2026-05-15' },
-  { id: 'SS-006', guestName: 'Fatuma Ali',     phone: '+254767890123', email: 'fatuma@email.com', idNumber: 'TZ567890', checkIn: '2026-05-20', checkOut: '2026-05-22', adults: 2, children: 0, roomType: 'Deluxe Twin',   roomNumber: '203', roomPrice: 12000, totalAmount: 24000, deposit: 0,     taxes: 2160,  paymentMethod: 'Card',        paymentStatus: 'unpaid',  bookingStatus: 'pending',     specialRequests: 'Late check-in after 10pm', createdAt: '2026-05-16' },
-  { id: 'SS-007', guestName: 'David Kimani',   phone: '+254778901234', email: 'david@email.com',  idNumber: 'KE678901', checkIn: '2026-05-21', checkOut: '2026-05-25', adults: 2, children: 0, roomType: 'Penthouse',     roomNumber: '401', roomPrice: 30000, totalAmount: 120000,deposit: 60000, taxes: 10800, paymentMethod: 'Bank Transfer',paymentStatus: 'partial', bookingStatus: 'confirmed',   specialRequests: 'Airport pickup needed',    createdAt: '2026-05-14' },
-  { id: 'SS-008', guestName: 'Sandra Achieng', phone: '+254789012345', email: 'sandra@email.com', idNumber: 'KE789012', checkIn: '2026-05-19', checkOut: '2026-05-22', adults: 1, children: 0, roomType: 'Deluxe King',   roomNumber: '202', roomPrice: 12000, totalAmount: 36000, deposit: 0,     taxes: 3240,  paymentMethod: 'Mpesa',       paymentStatus: 'unpaid',  bookingStatus: 'cancelled',   specialRequests: '',                          createdAt: '2026-05-13' },
-];
-
 function mapApiBooking(booking: ApiBooking): Booking {
   const guestName = [booking.guest?.first_name, booking.guest?.last_name].filter(Boolean).join(' ') || 'Guest';
   const roomType = booking.room?.room_type ?? booking.room?.roomType;
   const checkIn = String(booking.check_in_date).slice(0, 10);
   const checkOut = String(booking.check_out_date).slice(0, 10);
-  const roomPrice = Number(roomType?.base_rate ?? booking.subtotal ?? 0);
+  // Laravel's RoomType uses `base_price`; fall back to subtotal.
+  const roomPrice = Number(roomType?.base_price ?? booking.subtotal ?? 0);
   const totalAmount = Number(booking.total_price ?? 0);
   const taxes = Number(booking.tax_amount ?? 0);
 
   return {
+    numericId: booking.id,
     id: booking.booking_reference,
     guestName,
     phone: booking.guest?.phone ?? '',
@@ -119,9 +111,7 @@ const emptyForm = {
   roomType: 'Standard King', roomNumber: '', roomPrice: 8000,
   deposit: 0, paymentMethod: 'Mpesa', paymentStatus: 'unpaid',
   bookingStatus: 'pending', specialRequests: '',
-};
-
-// ─── Helper ───────────────────────────────────────────────────────────────────
+};// ─── Helper ───────────────────────────────────────────────────────────────────
 function calcNights(checkIn: string, checkOut: string) {
   if (!checkIn || !checkOut) return 0;
   const diff = new Date(checkOut).getTime() - new Date(checkIn).getTime();
@@ -130,10 +120,12 @@ function calcNights(checkIn: string, checkOut: string) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function BookingsPage() {
-  const [bookings, setBookings]         = useState<Booking[]>(INITIAL_BOOKINGS);
+  const [bookings, setBookings]         = useState<Booking[]>([]);
   const apiBookings = useBookingsApiStore((state) => state.bookings);
   const loadError = useBookingsApiStore((state) => state.error);
   const fetchBookings = useBookingsApiStore((state) => state.fetchBookings);
+  const isAuthed = useAuthStore((state) => state.isAuthenticated);
+  const [rooms, setRooms]               = useState<ApiRoom[]>([]);
   const [search, setSearch]             = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter]     = useState('');
@@ -142,16 +134,54 @@ export default function BookingsPage() {
   const [viewBooking, setViewBooking]   = useState<Booking | null>(null);
   const [form, setForm]                 = useState(emptyForm);
   const [formError, setFormError]       = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     void fetchBookings();
   }, [fetchBookings]);
 
   useEffect(() => {
-    if (apiBookings.length > 0) {
-      setBookings(apiBookings.map(mapApiBooking));
-    }
+    setBookings(apiBookings.map(mapApiBooking));
   }, [apiBookings]);
+
+  // Load real rooms so the form can submit room_id + room_type_id to Laravel.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchRooms();
+        const payload = Array.isArray(res.data) ? res.data : res.data.data;
+        if (!cancelled) setRooms(payload ?? []);
+      } catch {
+        if (!cancelled) setRooms([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAuthed]);
+
+  // Find or create a guest by phone number. The backend requires guest_id on a
+  // booking, so this resolves the form's typed-in guest into a real DB row.
+  const resolveGuestId = async (name: string, phone: string, email: string): Promise<number> => {
+    const trimmedPhone = phone.trim();
+    if (trimmedPhone) {
+      const res = await fetchGuests();
+      const list: ApiGuest[] = Array.isArray(res.data) ? res.data : res.data.data ?? [];
+      const existing = list.find((g) => g.phone === trimmedPhone);
+      if (existing) return existing.id;
+    }
+
+    const [first, ...rest] = name.trim().split(/\s+/);
+    const last = rest.join(' ') || '-';
+    const created = await createGuest({
+      first_name: first || 'Guest',
+      last_name: last,
+      phone: phone || null,
+      email: email || null,
+    });
+    const guest = (created.data as { data?: ApiGuest })?.data ?? (created.data as ApiGuest);
+    if (!guest?.id) throw new Error('Guest creation returned no id.');
+    return guest.id;
+  };
 
   // Derived values
   const nights      = calcNights(form.checkIn, form.checkOut);
@@ -199,7 +229,7 @@ export default function BookingsPage() {
     });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.guestName || !form.checkIn || !form.checkOut || !form.roomNumber) {
       setFormError('Please fill in all required fields.');
       return;
@@ -212,17 +242,55 @@ export default function BookingsPage() {
       setFormError(`Room ${form.roomNumber} is already booked for these dates!`);
       return;
     }
-    const newBooking: Booking = {
-      ...form,
-      id: `SS-${String(bookings.length + 1).padStart(3, '0')}`,
-      totalAmount,
-      taxes,
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    setBookings((prev) => [newBooking, ...prev]);
-    setForm(emptyForm);
-    setShowForm(false);
+
+    const room = rooms.find((r) => String(r.room_number) === String(form.roomNumber));
+    if (!room) {
+      setFormError(`Room ${form.roomNumber} is not available in the system.`);
+      return;
+    }
+    const roomTypeId = (room.room_type ?? room.roomType)?.id;
+    if (!roomTypeId) {
+      setFormError('Selected room has no room type. Please contact an admin.');
+      return;
+    }
+
+    setIsSubmitting(true);
     setFormError('');
+    try {
+      const guestId = await resolveGuestId(form.guestName, form.phone, form.email);
+      await createBooking({
+        guest_id: guestId,
+        room_id: room.id,
+        room_type_id: roomTypeId,
+        check_in: form.checkIn,
+        check_out: form.checkOut,
+        adults: form.adults,
+        children: form.children,
+        notes: form.specialRequests,
+      });
+
+      setForm(emptyForm);
+      setShowForm(false);
+      await fetchBookings();
+    } catch (err) {
+      const message = (err as { message?: string; errors?: Record<string, string[]> })?.message
+        ?? (err as { errors?: Record<string, string[]> })?.errors
+          ? Object.values((err as { errors?: Record<string, string[]> }).errors ?? {}).flat().join(' ')
+          : 'Failed to create booking. Please try again.';
+      setFormError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCancel = async (booking: Booking) => {
+    if (!window.confirm(`Cancel booking ${booking.id} for ${booking.guestName}?`)) return;
+    try {
+      await cancelBooking(booking.numericId);
+      await fetchBookings();
+    } catch (err) {
+      window.alert('Failed to cancel booking: ' + ((err as { message?: string })?.message ?? 'unknown error'));
+    }
   };
 
   // Filters
@@ -387,7 +455,7 @@ export default function BookingsPage() {
                         <Mail className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => setBookings(prev => prev.map(bk => bk.id === b.id ? { ...bk, bookingStatus: 'cancelled' } : bk))}
+                        onClick={() => handleCancel(b)}
                         className="w-7 h-7 rounded-lg bg-red-50 text-red-400 flex items-center justify-center hover:bg-red-100 transition-colors" title="Cancel"
                       >
                         <XCircle className="w-3.5 h-3.5" />
@@ -612,8 +680,8 @@ export default function BookingsPage() {
                 <button onClick={() => handleFormChange('bookingStatus', 'pending')} className="flex items-center gap-2 px-4 h-9 bg-amber-100 text-amber-700 rounded-xl text-sm font-medium hover:bg-amber-200 transition-colors">
                   <FileText className="w-4 h-4" /> Save Draft
                 </button>
-                <button onClick={handleSubmit} className="flex items-center gap-2 px-4 h-9 bg-blue-500 text-white rounded-xl text-sm font-medium hover:bg-blue-600 transition-colors ml-auto">
-                  <CheckCircle className="w-4 h-4" /> Create Booking
+                <button onClick={handleSubmit} disabled={isSubmitting} className="flex items-center gap-2 px-4 h-9 bg-blue-500 text-white rounded-xl text-sm font-medium hover:bg-blue-600 transition-colors ml-auto disabled:opacity-60 disabled:cursor-not-allowed">
+                  <CheckCircle className="w-4 h-4" /> {isSubmitting ? 'Creating…' : 'Create Booking'}
                 </button>
               </div>
             </motion.div>

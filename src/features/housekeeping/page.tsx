@@ -6,15 +6,15 @@ import {
   CheckCircle,
   Clock,
   Filter,
+  Plus,
   RefreshCw,
   Search,
   Sparkles,
   User,
   X,
 } from 'lucide-react';
-import { mockHousekeepingTasks, mockRoomGrid } from '@/lib/mockData';
 import { cn } from '@/lib/utils';
-import { type ApiHousekeepingTask } from '@/lib/protectedEndpoints';
+import { type ApiHousekeepingTask, type ApiRoom, createHousekeepingTask, fetchRooms } from '@/lib/protectedEndpoints';
 import { useHousekeepingStore } from '@/app/store/housekeepingStore';
 
 const STATUS_CONFIG = {
@@ -28,23 +28,31 @@ const PRIORITY_CONFIG = {
   high: { label: 'High', bg: 'bg-red-50', text: 'text-red-500' },
   normal: { label: 'Normal', bg: 'bg-gray-50', text: 'text-gray-500' },
   low: { label: 'Low', bg: 'bg-green-50', text: 'text-green-500' },
+  urgent: { label: 'Urgent', bg: 'bg-red-50', text: 'text-red-500' },
 };
 
 const STAFF = ['Jane Mwende', 'Peter Njoroge', 'Alice Waweru', 'Tom Kariuki'];
 
-const ROOM_STATUS_CONFIG = {
+const ROOM_STATUS_CONFIG: Record<string, { label: string; dot: string; card: string }> = {
   available: { label: 'Available', dot: 'bg-emerald-500', card: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   occupied: { label: 'Occupied', dot: 'bg-red-500', card: 'bg-red-50 text-red-700 border-red-200' },
+  reserved: { label: 'Reserved', dot: 'bg-blue-500', card: 'bg-blue-50 text-blue-700 border-blue-200' },
+  dirty: { label: 'Dirty', dot: 'bg-amber-500', card: 'bg-amber-50 text-amber-700 border-amber-200' },
   cleaning: { label: 'Cleaning', dot: 'bg-amber-500', card: 'bg-amber-50 text-amber-700 border-amber-200' },
   maintenance: { label: 'Maintenance', dot: 'bg-slate-500', card: 'bg-slate-50 text-slate-700 border-slate-200' },
 };
 
-type Task = typeof mockHousekeepingTasks[number] & {
+interface Task {
+  id: number;
+  room: string;
+  type: string;
+  floor: number;
   status: keyof typeof STATUS_CONFIG;
   priority: keyof typeof PRIORITY_CONFIG;
-};
-
-type RoomGridStatus = keyof typeof ROOM_STATUS_CONFIG;
+  assignedTo: string | null;
+  notes: string;
+  updatedAt: string;
+}
 
 function mapHousekeepingTask(task: ApiHousekeepingTask): Task {
   const room = task.room;
@@ -56,15 +64,30 @@ function mapHousekeepingTask(task: ApiHousekeepingTask): Task {
     type: room?.room_type?.name ?? room?.roomType?.name ?? 'Room',
     floor: room?.floor ?? 0,
     status: backendStatus === 'completed' ? 'clean' : backendStatus === 'in_progress' ? 'cleaning' : 'dirty',
-    priority: task.priority === 'urgent' ? 'high' : task.priority,
-    assignedTo: task.assignee?.name ?? null,
+    priority: task.priority,
+    assignedTo: task.assigned_staff?.name ?? task.assignee?.name ?? null,
     notes: task.notes ?? '',
     updatedAt: task.updated_at ? new Date(task.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'now',
-  } as Task;
+  };
 }
 
+interface NewTaskForm {
+  roomId: number | '';
+  taskType: string;
+  priority: 'low' | 'normal' | 'urgent';
+  notes: string;
+  assignedTo: string;
+}
+
+const emptyNewTask: NewTaskForm = {
+  roomId: '',
+  taskType: 'cleaning',
+  priority: 'normal',
+  notes: '',
+  assignedTo: '',
+};
+
 export default function HousekeepingPage() {
-  const [tasks, setTasks] = useState<Task[]>(mockHousekeepingTasks as Task[]);
   const apiTasks = useHousekeepingStore((state) => state.tasks);
   const loadError = useHousekeepingStore((state) => state.error);
   const fetchTasks = useHousekeepingStore((state) => state.fetchTasks);
@@ -73,16 +96,33 @@ export default function HousekeepingPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<keyof typeof STATUS_CONFIG | 'all'>('all');
   const [selected, setSelected] = useState<Task | null>(null);
+  const [rooms, setRooms] = useState<ApiRoom[]>([]);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [newTask, setNewTask] = useState<NewTaskForm>(emptyNewTask);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+
+  const tasks: Task[] = useMemo(() => apiTasks.map(mapHousekeepingTask), [apiTasks]);
 
   useEffect(() => {
     void fetchTasks();
   }, [fetchTasks]);
 
   useEffect(() => {
-    if (apiTasks.length > 0) {
-      setTasks(apiTasks.map(mapHousekeepingTask));
-    }
-  }, [apiTasks]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchRooms();
+        const list: ApiRoom[] = Array.isArray(res.data) ? res.data : res.data.data ?? [];
+        if (!cancelled) setRooms(list);
+      } catch {
+        if (!cancelled) setRooms([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = tasks.filter((task) => {
     const normalizedSearch = search.toLowerCase();
@@ -99,11 +139,6 @@ export default function HousekeepingPage() {
   }), [tasks]);
 
   const updateStatus = async (id: number, status: keyof typeof STATUS_CONFIG) => {
-    const updatedAt = new Date().toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
     try {
       if (status === 'clean' || status === 'inspected') {
         await completeTask(id);
@@ -112,39 +147,62 @@ export default function HousekeepingPage() {
           status: status === 'cleaning' ? 'in_progress' : 'pending',
         });
       }
+      await fetchTasks();
     } catch {
-      // Store already exposes the backend error; keep local optimistic status for responsiveness.
+      // Store already surfaces the error.
     }
-
-    setTasks((prev) => prev.map((task) => (
-      task.id === id
-        ? { ...task, status, updatedAt }
-        : task
-    )));
-
     setSelected(null);
   };
 
-  const assignStaff = (id: number, staff: string) => {
-    const updatedAt = new Date().toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const assignStaff = async (id: number, staff: string) => {
+    try {
+      await updateTask(id, { assigned_to: staff });
+      await fetchTasks();
+    } catch {
+      // ignore; store shows the error
+    }
+  };
 
-    setTasks((prev) => prev.map((task) => (
-      task.id === id
-        ? { ...task, assignedTo: staff, updatedAt }
-        : task
-    )));
-
-    setSelected((prev) => (prev?.id === id ? { ...prev, assignedTo: staff, updatedAt } : prev));
+  const handleCreate = async () => {
+    if (!newTask.roomId) {
+      setCreateError('Pick a room.');
+      return;
+    }
+    setCreating(true);
+    setCreateError('');
+    try {
+      const payload: Record<string, unknown> = {
+        room_id: newTask.roomId,
+        task_type: newTask.taskType,
+        priority: newTask.priority,
+        notes: newTask.notes || undefined,
+        status: 'pending',
+      };
+      if (newTask.assignedTo.trim()) {
+        payload.assigned_to = newTask.assignedTo.trim();
+      }
+      await createHousekeepingTask(payload);
+      setNewTask(emptyNewTask);
+      setNewTaskOpen(false);
+      await fetchTasks();
+    } catch (err) {
+      setCreateError((err as { message?: string })?.message ?? 'Failed to create task.');
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
     <div className="p-5 space-y-5 min-h-screen">
-      <div>
-        <h2 className="text-xl font-bold text-white drop-shadow">Housekeeping</h2>
-        <p className="text-white/70 text-sm">Room cleaning and maintenance status</p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-white drop-shadow">Housekeeping</h2>
+          <p className="text-white/70 text-sm">Room cleaning and maintenance status</p>
+        </div>
+        <button onClick={() => setNewTaskOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-lg hover:bg-blue-700">
+          <Plus className="w-4 h-4" />
+          New Task
+        </button>
       </div>
 
       {loadError && (
@@ -182,26 +240,30 @@ export default function HousekeepingPage() {
           </div>
           <BedDouble className="w-5 h-5 text-blue-500" />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2">
-          {mockRoomGrid.map((room) => {
-            const status = room.status as RoomGridStatus;
-            const config = ROOM_STATUS_CONFIG[status] ?? ROOM_STATUS_CONFIG.available;
-
-            return (
-              <div
-                key={room.number}
-                className={cn('rounded-xl border p-3 transition hover:-translate-y-0.5 hover:shadow-md', config.card)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-bold">Room {room.number}</p>
-                  <span className={cn('w-2.5 h-2.5 rounded-full shrink-0', config.dot)} />
+        {rooms.length === 0 ? (
+          <p className="text-xs text-gray-500">No rooms configured yet.</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2">
+            {rooms.map((room) => {
+              const status = room.status as string;
+              const config = ROOM_STATUS_CONFIG[status] ?? ROOM_STATUS_CONFIG.available;
+              const roomType = room.room_type?.name ?? room.roomType?.name ?? 'Room';
+              return (
+                <div
+                  key={room.id}
+                  className={cn('rounded-xl border p-3 transition hover:-translate-y-0.5 hover:shadow-md', config.card)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-bold">Room {room.room_number}</p>
+                    <span className={cn('w-2.5 h-2.5 rounded-full shrink-0', config.dot)} />
+                  </div>
+                  <p className="mt-1 text-xs opacity-75">{roomType}</p>
+                  <p className="mt-2 text-xs font-semibold">{config.label}</p>
                 </div>
-                <p className="mt-1 text-xs opacity-75">{room.type}</p>
-                <p className="mt-2 text-xs font-semibold">{config.label}</p>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl p-4 shadow-sm flex gap-3 flex-wrap items-center">
@@ -235,7 +297,7 @@ export default function HousekeepingPage() {
         <AnimatePresence>
           {filtered.map((task) => {
             const statusConfig = STATUS_CONFIG[task.status];
-            const priorityConfig = PRIORITY_CONFIG[task.priority];
+            const priorityConfig = PRIORITY_CONFIG[task.priority] ?? PRIORITY_CONFIG.normal;
             const Icon = statusConfig.icon;
 
             return (
@@ -327,6 +389,13 @@ export default function HousekeepingPage() {
         </AnimatePresence>
       </div>
 
+      {filtered.length === 0 && tasks.length > 0 && (
+        <p className="text-center text-sm text-white/70">No housekeeping tasks match the filter.</p>
+      )}
+      {tasks.length === 0 && !loadError && (
+        <p className="text-center text-sm text-white/70">No housekeeping tasks yet. Click "New Task" to create one.</p>
+      )}
+
       <AnimatePresence>
         {selected && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -351,7 +420,7 @@ export default function HousekeepingPage() {
                     className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center"
                     aria-label="Close housekeeping details"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-4 w-4" />
                   </button>
                 </div>
                 <h3 className="text-xl font-bold">Room {selected.room}</h3>
@@ -407,6 +476,98 @@ export default function HousekeepingPage() {
                     <p className="text-sm text-gray-600">{selected.notes}</p>
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {newTaskOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setNewTaskOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 overflow-hidden"
+            >
+              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+                <h3 className="text-base font-bold text-slate-900">New housekeeping task</h3>
+                <button onClick={() => setNewTaskOpen(false)} className="rounded-full bg-slate-100 p-1 text-slate-500 hover:bg-slate-200">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="space-y-3 px-5 py-4">
+                <label className="block text-xs font-semibold text-slate-600">
+                  Room
+                  <select
+                    value={newTask.roomId}
+                    onChange={(e) => setNewTask({ ...newTask, roomId: e.target.value ? Number(e.target.value) : '' })}
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal"
+                  >
+                    <option value="">Select a room</option>
+                    {rooms.map((room) => (
+                      <option key={room.id} value={room.id}>Room {room.room_number} - {room.room_type?.name ?? 'Room'}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-slate-600">
+                  Task type
+                  <select
+                    value={newTask.taskType}
+                    onChange={(e) => setNewTask({ ...newTask, taskType: e.target.value })}
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal"
+                  >
+                    <option value="cleaning">Cleaning</option>
+                    <option value="turndown">Turndown service</option>
+                    <option value="maintenance">Maintenance check</option>
+                    <option value="inspection">Inspection</option>
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-slate-600">
+                  Priority
+                  <select
+                    value={newTask.priority}
+                    onChange={(e) => setNewTask({ ...newTask, priority: e.target.value as NewTaskForm['priority'] })}
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal"
+                  >
+                    <option value="low">Low</option>
+                    <option value="normal">Normal</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-slate-600">
+                  Assign to (optional)
+                  <input
+                    value={newTask.assignedTo}
+                    onChange={(e) => setNewTask({ ...newTask, assignedTo: e.target.value })}
+                    placeholder="Staff name"
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal"
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-slate-600">
+                  Notes
+                  <textarea
+                    value={newTask.notes}
+                    onChange={(e) => setNewTask({ ...newTask, notes: e.target.value })}
+                    rows={3}
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1 text-sm font-normal"
+                  />
+                </label>
+                {createError && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{createError}</p>}
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+                <button onClick={() => setNewTaskOpen(false)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-100">Cancel</button>
+                <button onClick={handleCreate} disabled={creating} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-60">
+                  {creating ? 'Creating…' : 'Create task'}
+                </button>
               </div>
             </motion.div>
           </div>

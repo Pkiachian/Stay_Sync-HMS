@@ -17,8 +17,10 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  hasHydrated: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  setHasHydrated: (value: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -28,6 +30,7 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       isAuthenticated: false,
       isLoading: false,
+      hasHydrated: false,
 
       login: async (email, password) => {
         set({ isLoading: true });
@@ -62,6 +65,8 @@ export const useAuthStore = create<AuthState>()(
         localStorage.removeItem('user');
         set({ user: null, token: null, isAuthenticated: false });
       },
+
+      setHasHydrated: (value) => set({ hasHydrated: value }),
     }),
     {
       name: 'staysync-auth',
@@ -70,6 +75,9 @@ export const useAuthStore = create<AuthState>()(
         token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<AuthState> | undefined;
         const token = persisted?.token ?? null;
