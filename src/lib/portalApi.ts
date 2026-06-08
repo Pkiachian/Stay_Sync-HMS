@@ -189,3 +189,25 @@ export function lookupPortalRoomServiceOrder(params: { reference: string; lastNa
     params: { reference: params.reference, last_name: params.lastName },
   });
 }
+
+export type PortalChatMessage = { role: 'user' | 'assistant' | 'system'; content: string };
+
+export type PortalChatHandoff = {
+  reason: string;
+  reference: string;
+  id: number;
+};
+
+export type PortalChatResponse = {
+  reply: string;
+  handoff: PortalChatHandoff | null;
+};
+
+export function askPortalChat(payload: {
+  messages: PortalChatMessage[];
+  session_id?: string;
+  guest_name?: string;
+  room_number?: string;
+}) {
+  return api.post<{ success: boolean; data: PortalChatResponse }>('/portal/chat', payload);
+}

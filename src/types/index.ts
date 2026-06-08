@@ -2,7 +2,7 @@ export interface User {
   id: number;
   name: string;
   email: string;
-  role: 'admin' | 'manager' | 'staff' | 'receptionist' | 'front_desk' | 'housekeeping' | 'pos_staff';
+  role: 'admin' | 'manager' | 'staff' | 'receptionist' | 'front_desk' | 'housekeeping' | 'housekeeper' | 'pos_staff';
   avatar?: string;
 }
 

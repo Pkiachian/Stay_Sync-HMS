@@ -10,6 +10,7 @@ import {
   Hotel,
   Loader2,
   MapPin,
+  MessageCircle,
   Plane,
   RefreshCw,
   Search,
@@ -20,19 +21,23 @@ import {
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 
-type ServiceType = 'taxi' | 'airport' | 'wakeup' | 'laundry' | 'housekeeping' | 'tour';
+type ServiceType = 'taxi' | 'airport' | 'wakeup' | 'laundry' | 'housekeeping' | 'tour' | 'chat_handoff';
 type Status = 'open' | 'in_progress' | 'resolved' | 'cancelled';
+
+type ChatTranscript = Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
 
 type ServiceRequest = {
   id: number;
   reference: string;
   service_type: ServiceType;
+  source: string | null;
   guest_name: string;
   room_number: string | null;
   phone: string | null;
   email: string | null;
   preferred_at: string | null;
   details: string | null;
+  transcript: ChatTranscript | null;
   status: Status;
   staff_notes: string | null;
   resolver?: { id: number; name: string } | null;
@@ -41,12 +46,13 @@ type ServiceRequest = {
 };
 
 const SERVICE_META: Record<ServiceType, { label: string; Icon: typeof Car; accent: string }> = {
-  taxi:         { label: 'Taxi',             Icon: Car,         accent: 'from-amber-500 to-orange-600' },
-  airport:      { label: 'Airport Transfer', Icon: Plane,       accent: 'from-sky-500 to-indigo-600' },
-  wakeup:       { label: 'Wake-up Call',     Icon: AlarmClock,  accent: 'from-violet-500 to-purple-600' },
-  laundry:      { label: 'Laundry',          Icon: Shirt,       accent: 'from-rose-500 to-pink-600' },
-  housekeeping: { label: 'Housekeeping',     Icon: Sparkles,    accent: 'from-emerald-500 to-teal-600' },
-  tour:         { label: 'Tour Booking',     Icon: MapPin,      accent: 'from-cyan-500 to-blue-600' },
+  taxi:         { label: 'Taxi',             Icon: Car,           accent: 'from-amber-500 to-orange-600' },
+  airport:      { label: 'Airport Transfer', Icon: Plane,         accent: 'from-sky-500 to-indigo-600' },
+  wakeup:       { label: 'Wake-up Call',     Icon: AlarmClock,    accent: 'from-violet-500 to-purple-600' },
+  laundry:      { label: 'Laundry',          Icon: Shirt,         accent: 'from-rose-500 to-pink-600' },
+  housekeeping: { label: 'Housekeeping',     Icon: Sparkles,      accent: 'from-emerald-500 to-teal-600' },
+  tour:         { label: 'Tour Booking',     Icon: MapPin,        accent: 'from-cyan-500 to-blue-600' },
+  chat_handoff: { label: 'Chat Handoff',     Icon: MessageCircle, accent: 'from-fuchsia-500 to-violet-600' },
 };
 
 const STATUS_CONFIG: Record<Status, { label: string; dot: string; chip: string }> = {
@@ -329,6 +335,27 @@ export default function ConciergeInboxPage() {
                   <div className="rounded-xl bg-slate-50 p-3">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Details from guest</p>
                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{selected.details}</p>
+                  </div>
+                )}
+
+                {selected.service_type === 'chat_handoff' && selected.transcript && selected.transcript.length > 0 && (
+                  <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-600 mb-2">Chat transcript (last {selected.transcript.length})</p>
+                    <div className="max-h-48 space-y-1.5 overflow-y-auto pr-1">
+                      {selected.transcript.map((m, i) => (
+                        <div key={i} className="flex gap-2 text-xs">
+                          <span
+                            className={cn(
+                              'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase',
+                              m.role === 'user' ? 'bg-cyan-100 text-cyan-700' : 'bg-slate-200 text-slate-700',
+                            )}
+                          >
+                            {m.role}
+                          </span>
+                          <p className="text-slate-700 whitespace-pre-wrap break-words">{m.content}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 

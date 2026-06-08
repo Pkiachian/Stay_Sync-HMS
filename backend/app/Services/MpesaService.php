@@ -40,8 +40,10 @@ class MpesaService
         $timestamp = now()->format('YmdHis');
         $password  = base64_encode($this->shortcode . $this->passkey . $timestamp);
 
-        // Normalize phone: 0712345678 → 254712345678
-        $phone = '254' . ltrim(ltrim($phone, '+'), '0');
+        // Normalize phone to 2547XXXXXXXX (Safaricom's required format).
+        // Accepts: 0712345678, +254712345678, 254712345678, 712345678.
+        $digits = preg_replace('/\D+/', '', $phone);
+        $phone  = str_starts_with($digits, '254') ? $digits : '254' . ltrim($digits, '0');
 
         $response = Http::withToken($token)
             ->post("{$this->baseUrl}/mpesa/stkpush/v1/processrequest", [

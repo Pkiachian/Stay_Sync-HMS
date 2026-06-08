@@ -2,7 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\AuthController;
+use App\Http\Controllers\Api\SessionController;
 use App\Http\Controllers\Api\RoomController;
 use App\Http\Controllers\Api\RoomStatusLogController;
 use App\Http\Controllers\Api\SettingsController;
@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\AboutController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\MpesaController;
 use App\Http\Controllers\Api\PortalController;
+use App\Http\Controllers\Api\Portal\ChatController as PortalChatController;
 use App\Http\Controllers\Api\Portal\ServiceRequestController as PortalServiceRequestController;
 use App\Http\Controllers\Api\Portal\LoyaltyController as PortalLoyaltyController;
 use App\Http\Controllers\Api\ServiceRequestStaffController;
@@ -29,8 +30,7 @@ use App\Http\Controllers\Api\ServiceRequestStaffController;
 | PUBLIC ROUTES (No Auth Required)
 |--------------------------------------------------------------------------
 */
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login',    [AuthController::class, 'login']);
+Route::post('/login',    [SessionController::class, 'login']);
 
 // About & Contact — publicly accessible
 Route::get('/about',    [AboutController::class,  'index']);
@@ -52,6 +52,9 @@ Route::prefix('portal')->group(function () {
     Route::post('service-requests',     [PortalServiceRequestController::class, 'store']);
     Route::get('loyalty',               [PortalLoyaltyController::class, 'show']);
 
+    // Guest help chat (LLM-backed, no auth, falls back gracefully if no key)
+    Route::post('chat',                  [PortalChatController::class, 'ask']);
+
     // Room service
     Route::get('room-service/menu',                     [PortalController::class, 'roomServiceMenu']);
     Route::post('room-service/orders',                 [PortalController::class, 'createRoomServiceOrder']);
@@ -65,8 +68,16 @@ Route::prefix('portal')->group(function () {
 */
 Route::middleware('auth:sanctum')->group(function () {
 
-    Route::get('/user',      [AuthController::class, 'user']);
-    Route::post('/logout',   [AuthController::class, 'logout']);
+    // Session
+    Route::get('/user',           [SessionController::class, 'me']);     // legacy alias
+    Route::get('/me',             [SessionController::class, 'me']);
+    Route::post('/logout',        [SessionController::class, 'logout']);
+    Route::post('/session/refresh', [SessionController::class, 'refresh']);
+
+    // Admin-only: create staff accounts
+    Route::middleware('role:admin')->group(function () {
+        Route::post('/register', [SessionController::class, 'register']);
+    });
 
     // M-Pesa STK Push — auth required to initiate payment
     Route::post('/mpesa/initiate', [MpesaController::class, 'initiate']);

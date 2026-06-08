@@ -20,6 +20,10 @@ class ServiceRequestStaffController extends Controller
             $query->where('service_type', $type);
         }
 
+        if ($source = $request->query('source')) {
+            $query->where('source', $source);
+        }
+
         return $this->success('Service requests retrieved successfully', $query->with('resolver')->get());
     }
 
