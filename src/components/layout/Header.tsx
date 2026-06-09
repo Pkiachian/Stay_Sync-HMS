@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { BarChart3, Bell, CheckCheck, ClipboardCheck, Menu, Moon, Sparkles, Sun, UserCog, X } from 'lucide-react';
+import { Bell, CheckCheck, Menu, Moon, Sun, X } from 'lucide-react';
 import { useUIStore } from '@/app/store/uiStore';
 
 const PAGE_TITLES: Record<string, string> = {
@@ -20,13 +20,6 @@ const NOTIFICATIONS = [
   { id: 3, title: 'Check-out complete', message: 'Peter Otieno checked out of Room 110', time: '1 hr ago', unread: true },
   { id: 4, title: 'Payment received', message: 'Invoice #SS-2024-00120 paid - KES 54,000', time: '2 hr ago', unread: false },
   { id: 5, title: 'Maintenance request', message: 'Room 312 - AC not working, ticket raised', time: '3 hr ago', unread: false },
-];
-
-const ROLE_VIEWS = [
-  { label: 'Receptionist', to: '/bookings', Icon: ClipboardCheck },
-  { label: 'Manager', to: '/reports', Icon: BarChart3 },
-  { label: 'Housekeeper', to: '/housekeeping', Icon: Sparkles },
-  { label: 'Admin', to: '/reports', Icon: UserCog },
 ];
 
 export function Header() {
@@ -58,16 +51,7 @@ export function Header() {
         <p className="hidden text-[11px] text-cyan-100/58 sm:block">Live hotel operations workspace</p>
       </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="hidden items-center gap-1.5 lg:flex">
-          {ROLE_VIEWS.map(({ label, to, Icon }) => (
-            <Link key={label} to={to} className="flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-cyan-50/72 transition hover:bg-white/10 hover:text-white">
-              <Icon className="h-3.5 w-3.5" />
-              {label}
-            </Link>
-          ))}
-        </div>
-      </div>
+      <div className="min-w-0 flex-1" />
 
       <div className="hidden items-center gap-1 md:flex">
         <Link to="/about" className="rounded-xl px-3 py-2 text-xs font-semibold text-cyan-50/70 transition hover:bg-white/10 hover:text-white">About Us</Link>

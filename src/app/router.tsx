@@ -18,6 +18,7 @@ import PortalConciergePage from '@/features/portal/ConciergePage';
 import PortalBillingPage from '@/features/portal/BillingPage';
 import PortalLoyaltyPage from '@/features/portal/LoyaltyPage';
 import PortalChatPage from '@/features/portal/ChatPage';
+import PackageDetailsPage from '@/features/portal/PackageDetailsPage';
 import DashboardPage from '@/features/dashboard/page';
 import TapeChartPage from '@/features/tape-chart/page';
 import BookingsPage from '@/features/bookings/page';
@@ -83,6 +84,7 @@ function RoleRedirect() {
 function roles(...rs: string[]) { return rs; }
 
 export const router = createBrowserRouter([
+  { path: '/', element: <Navigate to="/portal" replace /> },
   { path: '/login', element: <LoginPage /> },
   // Public guest self-service portal — no auth required
   {
@@ -99,6 +101,7 @@ export const router = createBrowserRouter([
       { path: 'billing',       element: <PortalBillingPage /> },
       { path: 'loyalty',       element: <PortalLoyaltyPage /> },
       { path: 'chat',          element: <PortalChatPage /> },
+      { path: 'packages/:slug', element: <PackageDetailsPage /> },
     ],
   },
   {

@@ -30,7 +30,9 @@ use App\Http\Controllers\Api\ServiceRequestStaffController;
 | PUBLIC ROUTES (No Auth Required)
 |--------------------------------------------------------------------------
 */
-Route::post('/login',    [SessionController::class, 'login']);
+Route::post('/login',        [SessionController::class, 'login'])->middleware('throttle:login');
+Route::post('/login/resend', [SessionController::class, 'resendOtp'])->middleware('throttle:resend-otp');
+Route::post('/verify-otp',   [SessionController::class, 'verifyOtp'])->middleware('throttle:verify-otp');
 
 // About & Contact — publicly accessible
 Route::get('/about',    [AboutController::class,  'index']);
@@ -87,7 +89,7 @@ Route::middleware('auth:sanctum')->group(function () {
     | Admin + Staff Routes
     |----------------------------------------------------------------------
     */
-    Route::middleware('role:admin,staff')->group(function () {
+    Route::middleware('role:admin,manager,receptionist,housekeeper')->group(function () {
 
         // Rooms & Room Types (read only for staff)
         Route::apiResource('rooms',      RoomController::class)->only(['index', 'show']);

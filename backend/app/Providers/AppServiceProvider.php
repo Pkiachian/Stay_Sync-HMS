@@ -4,6 +4,9 @@ namespace App\Providers;
 
 use App\Models\Room;
 use App\Observers\RoomObserver;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -16,5 +19,23 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Room::observe(RoomObserver::class);
+
+        $this->registerRateLimiters();
+    }
+
+    private function registerRateLimiters(): void
+    {
+        RateLimiter::for('login', function (Request $request) {
+            $email = strtolower((string) $request->input('email', ''));
+            return Limit::perMinutes(15, 10)->by($email . '|' . $request->ip());
+        });
+
+        RateLimiter::for('verify-otp', function (Request $request) {
+            return Limit::perMinutes(15, 20)->by($request->ip());
+        });
+
+        RateLimiter::for('resend-otp', function (Request $request) {
+            return Limit::perHour(5)->by($request->ip());
+        });
     }
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
+  ArrowRight,
   BedDouble,
   CalendarDays,
   Coffee,
@@ -12,17 +13,10 @@ import {
   Search,
   Sparkles,
   Star,
-  Users,
 } from 'lucide-react';
 import { fetchPortalRoomTypes, type PortalRoomType } from '@/lib/portalApi';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
-
-const PACKAGES = [
-  { title: 'Honeymoon Package',  desc: 'Couples spa, candlelit dinner, late checkout, and a welcome bottle of wine.', icon: Sparkles, accent: 'from-pink-500 to-rose-600' },
-  { title: 'Family Vacation',    desc: 'Connecting rooms, kids eat free, and complimentary airport transfers.',     icon: Users,    accent: 'from-amber-500 to-orange-600' },
-  { title: 'Business Traveler',  desc: 'Express check-in, meeting room access, high-speed WiFi, and laundry.',     icon: CreditCard, accent: 'from-sky-500 to-indigo-600' },
-  { title: 'Weekend Getaway',    desc: 'Two nights with breakfast, late Sunday checkout, and rooftop access.',     icon: CalendarDays, accent: 'from-emerald-500 to-teal-600' },
-];
+import { PACKAGES } from './PackageDetailsPage';
 
 const SERVICES = [
   { to: '/portal/check-in',    label: 'Online Check-In',      desc: 'Upload ID, sign forms, pick arrival time',          Icon: Sparkles },
@@ -214,19 +208,53 @@ export default function PortalLandingPage() {
 
       {/* PACKAGES */}
       <section>
-        <div className="mb-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-cyan-100/80">Curated for you</p>
-          <h2 className="mt-1 text-2xl font-bold text-white">Experiences & Packages</h2>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-cyan-100/80">Curated for you</p>
+            <h2 className="mt-1 text-2xl font-bold text-white">Experiences & Packages</h2>
+            <p className="mt-1 text-sm text-cyan-50/75">Hand-picked stays for every kind of trip — couples, families, business, and weekend escapes.</p>
+          </div>
+          <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold text-cyan-100 backdrop-blur">
+            {PACKAGES.length} packages
+          </span>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {PACKAGES.map(({ title, desc, icon: Icon, accent }) => (
-            <div key={title} className="rounded-2xl border border-white/14 bg-white/92 p-5 text-slate-900 shadow-xl shadow-slate-950/20">
-              <div className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${accent} text-white`}>
-                <Icon className="h-5 w-5" />
+          {PACKAGES.map(({ slug, title, tagline, hero, priceFrom, priceUnit, rating, reviews, accent, short, icon: Icon }) => (
+            <Link
+              key={slug}
+              to={`/portal/packages/${slug}`}
+              className="group flex flex-col overflow-hidden rounded-2xl border border-white/14 bg-white/95 text-slate-900 shadow-xl shadow-slate-950/25 transition hover:-translate-y-1 hover:shadow-2xl"
+            >
+              <div className="relative h-40 overflow-hidden">
+                <img
+                  src={hero}
+                  alt={title}
+                  className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-slate-950/0 to-transparent" />
+                <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold text-slate-900 shadow">
+                  <Star className="h-3 w-3 fill-amber-400 text-amber-400" /> {rating} · {reviews}
+                </span>
+                <span className={`absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br ${accent} text-white shadow-lg`}>
+                  <Icon className="h-4 w-4" />
+                </span>
               </div>
-              <h3 className="text-sm font-bold">{title}</h3>
-              <p className="mt-1.5 text-xs leading-5 text-slate-500">{desc}</p>
-            </div>
+              <div className="flex flex-1 flex-col p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-700">{tagline}</p>
+                <h3 className="mt-1 text-base font-bold leading-snug">{title}</h3>
+                <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-slate-500">{short}</p>
+                <div className="mt-auto flex items-end justify-between pt-4">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">From</p>
+                    <p className="text-lg font-bold text-slate-900">KES {priceFrom.toLocaleString()}</p>
+                    <p className="text-[10px] text-slate-500">{priceUnit}</p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition group-hover:bg-cyan-600">
+                    View <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+              </div>
+            </Link>
           ))}
         </div>
       </section>

@@ -8,7 +8,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class CheckRole
 {
-    public function handle(Request $request, Closure $next, string $role, string ...$roles): Response
+    public function handle(Request $request, Closure $next, string ...$roles): Response
     {
         if (!$request->user()) {
             return response()->json([
@@ -17,7 +17,13 @@ class CheckRole
             ], 401);
         }
 
-        $allowedRoles = array_merge([$role], $roles);
+        $allowedRoles = [];
+        foreach ($roles as $r) {
+            foreach (explode(',', $r) as $part) {
+                $part = trim($part);
+                if ($part !== '') $allowedRoles[] = $part;
+            }
+        }
 
         if (!in_array($request->user()->role, $allowedRoles, true)) {
             return response()->json([
