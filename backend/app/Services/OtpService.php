@@ -138,9 +138,11 @@ class OtpService
 
     private function sendMail(User $user, string $code): void
     {
-        $body = "Your StaySync verification code is: {$code}\n\n"
+        $body = "Hi {$user->name},\n\n"
+            . "Your StaySync verification code is: {$code}\n\n"
             . "This code expires in " . LoginOtp::TTL_MINUTES . " minutes. "
-            . "If you did not request this, please change your password immediately.";
+            . "If you did not request this, please change your password immediately.\n\n"
+            . "— StaySync HMS";
 
         Mail::raw($body, function ($message) use ($user) {
             $message->to($user->email, $user->name)

@@ -16,6 +16,7 @@ import hotel2 from '@/assets/hotel-2.jpg';
 import hotel3 from '@/assets/hotel-3.jpg';
 import hotel4 from '@/assets/hotel-4.jpg';
 import hotel5 from '@/assets/hotel-5.jpg';
+import honeymoon from '@/assets/honeymoon-package.jpg';
 
 type Package = {
   slug: string;
@@ -43,8 +44,8 @@ export const PACKAGES: Package[] = [
     slug: 'honeymoon',
     title: 'Honeymoon Package',
     tagline: 'Romance, uninterrupted',
-    hero: hotel3,
-    gallery: [hotel3, hotel4, hotel2, hotel1],
+    hero: honeymoon,
+    gallery: [honeymoon, hotel4, hotel2, hotel1],
     priceFrom: 38500,
     priceUnit: 'per couple / 2 nights',
     duration: '2 nights',

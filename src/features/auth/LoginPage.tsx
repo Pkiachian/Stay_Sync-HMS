@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuthStore } from '@/app/store/authStore';
 import { HotelSlideshow } from '@/components/common/HotelSlideshow';
 import { StaySyncLogo } from '@/components/common/StaySyncLogo';
@@ -15,8 +16,9 @@ export default function LoginPage() {
   } = useAuthStore();
 
   const [step, setStep] = useState<Step>('credentials');
-  const [email, setEmail]       = useState('admin@staysync.test');
-  const [password, setPassword] = useState('password');
+  const [email, setEmail]       = useState('adminstaysync@gmail.com');
+  const [password, setPassword] = useState('admin@pass2002');
+  const [showPassword, setShowPassword] = useState(false);
   const [otpToken, setOtpToken] = useState<string | null>(null);
   const [digits, setDigits]     = useState<string[]>(() => Array(OTP_LENGTH).fill(''));
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -153,11 +155,25 @@ export default function LoginPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium block mb-1.5" htmlFor="password">Password</label>
-                    <input
-                      id="password" type="password" value={password}
-                      onChange={(e) => setPassword(e.target.value)} required
-                      className="w-full h-10 px-3 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
+                    <div className="relative">
+                      <input
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        className="w-full h-10 px-3 pr-10 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((s) => !s)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        aria-pressed={showPassword}
+                        className="absolute inset-y-0 right-0 flex items-center justify-center w-10 text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-r-lg"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                   <button
                     type="submit" disabled={isLoading}
@@ -167,8 +183,7 @@ export default function LoginPage() {
                   </button>
                 </form>
                 <p className="text-xs text-muted-foreground text-center mt-4">
-                  Demo accounts: admin / manager / receptionist / housekeeper<br />
-                  <span className="opacity-70">password: "password" for all</span>
+                  A 6-digit verification code will be emailed to you after sign-in.
                 </p>
               </>
             ) : (

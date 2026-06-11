@@ -17,6 +17,7 @@ import {
 import { fetchPortalRoomTypes, type PortalRoomType } from '@/lib/portalApi';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { PACKAGES } from './PackageDetailsPage';
+import { getRoomTypeImage } from './RoomTypeDetailsPage';
 
 const SERVICES = [
   { to: '/portal/check-in',    label: 'Online Check-In',      desc: 'Upload ID, sign forms, pick arrival time',          Icon: Sparkles },
@@ -184,25 +185,41 @@ export default function PortalLandingPage() {
               Loading room types…
             </div>
           )}
-          {roomTypes.map((rt) => (
-            <article key={rt.id}
-              className="overflow-hidden rounded-2xl border border-white/14 bg-white/92 text-slate-900 shadow-xl shadow-slate-950/20 backdrop-blur-xl transition hover:-translate-y-0.5">
-              <div className="h-36 bg-gradient-to-br from-cyan-600 via-blue-700 to-indigo-800" />
-              <div className="p-4">
-                <h3 className="text-base font-bold">{rt.name}</h3>
-                <p className="mt-1 line-clamp-2 text-xs text-slate-500">{rt.description}</p>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {rt.amenities?.slice(0, 3).map((a) => (
-                    <span key={a} className="rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-medium text-cyan-700">{a}</span>
-                  ))}
+          {roomTypes.map((rt) => {
+            const slug = String(rt.name).toLowerCase().replace(/\s+/g, '-');
+            const hero = getRoomTypeImage(rt.name);
+            return (
+              <Link key={rt.id} to={`/portal/rooms/${slug}`}
+                className="group flex flex-col overflow-hidden rounded-2xl border border-white/14 bg-white/92 text-slate-900 shadow-xl shadow-slate-950/20 backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-2xl">
+                <div className="relative h-36 overflow-hidden bg-slate-200">
+                  {hero ? (
+                    <img
+                      src={hero}
+                      alt={rt.name}
+                      className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-gradient-to-br from-cyan-600 via-blue-700 to-indigo-800" />
+                  )}
                 </div>
-                <div className="mt-3 flex items-end justify-between">
-                  <p className="text-lg font-bold text-slate-900">KES {Number(rt.base_price).toLocaleString()}<span className="text-xs font-normal text-slate-500"> / night</span></p>
-                  <Link to={`/portal/booking?roomTypeId=${rt.id}`} className="rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800">Book</Link>
+                <div className="flex flex-1 flex-col p-4">
+                  <h3 className="text-base font-bold">{rt.name}</h3>
+                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">{rt.description}</p>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {rt.amenities?.slice(0, 3).map((a) => (
+                      <span key={a} className="rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-medium text-cyan-700">{a}</span>
+                    ))}
+                  </div>
+                  <div className="mt-auto flex items-end justify-between pt-3">
+                    <p className="text-lg font-bold text-slate-900">KES {Number(rt.base_price).toLocaleString()}<span className="text-xs font-normal text-slate-500"> / night</span></p>
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition group-hover:bg-cyan-600">
+                      View <ArrowRight className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       </section>
 

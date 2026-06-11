@@ -19,6 +19,7 @@ import PortalBillingPage from '@/features/portal/BillingPage';
 import PortalLoyaltyPage from '@/features/portal/LoyaltyPage';
 import PortalChatPage from '@/features/portal/ChatPage';
 import PackageDetailsPage from '@/features/portal/PackageDetailsPage';
+import RoomTypeDetailsPage from '@/features/portal/RoomTypeDetailsPage';
 import DashboardPage from '@/features/dashboard/page';
 import TapeChartPage from '@/features/tape-chart/page';
 import BookingsPage from '@/features/bookings/page';
@@ -102,6 +103,7 @@ export const router = createBrowserRouter([
       { path: 'loyalty',       element: <PortalLoyaltyPage /> },
       { path: 'chat',          element: <PortalChatPage /> },
       { path: 'packages/:slug', element: <PackageDetailsPage /> },
+      { path: 'rooms/:slug',     element: <RoomTypeDetailsPage /> },
     ],
   },
   {
