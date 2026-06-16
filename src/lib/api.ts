@@ -8,6 +8,13 @@ if (!API_URL) {
 
 const api = axios.create({
   baseURL: API_URL,
+  // A hung backend is the most common production failure mode: a
+  // VITE_API_URL that points nowhere, ngrok down, or a dead tunnel.
+  // Axios's default timeout is 0 (never), so without this every page
+  // would sit on its loading spinner indefinitely. 20s is generous
+  // for ngrok + Daraja callbacks but short enough that the user sees
+  // a real error and we can fall back gracefully.
+  timeout: 20_000,
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',

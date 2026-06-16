@@ -28,14 +28,15 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
   },
 
   fetchArrivals: async () => {
+    set({ isLoading: true, error: '' });
     try {
       const response = await fetchBookings();
       const list: ApiBooking[] = Array.isArray(response.data) ? response.data : response.data.data ?? [];
       const today = new Date().toISOString().slice(0, 10);
       const arrivals = list.filter((b) => String(b.check_in_date).slice(0, 10) === today);
-      set({ arrivals });
+      set({ arrivals, isLoading: false });
     } catch {
-      set({ arrivals: [] });
+      set({ arrivals: [], isLoading: false, error: 'Live dashboard data unavailable.' });
     }
   },
 }));
