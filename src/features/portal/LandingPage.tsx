@@ -56,11 +56,32 @@ export default function PortalLandingPage() {
   const [guests, setGuests] = useState(2);
   const [roomTypeId, setRoomTypeId] = useState('');
   const [roomTypes, setRoomTypes] = useState<PortalRoomType[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     fetchPortalRoomTypes()
-      .then((res) => setRoomTypes(res.data.data ?? []))
-      .catch(() => setRoomTypes([]));
+      .then((res) => {
+        if (cancelled) return;
+        setRoomTypes(res.data.data ?? []);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message =
+          (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+          (err as { message?: string })?.message ??
+          'Could not reach the server. Please try again.';
+        setLoadError(message);
+        setRoomTypes([]);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function handleSearch(e: React.FormEvent) {
@@ -180,46 +201,55 @@ export default function PortalLandingPage() {
           <Link to="/portal/booking" className="text-xs font-semibold text-cyan-200 hover:text-white">View all →</Link>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {roomTypes.length === 0 && (
+          {loading ? (
             <div className="col-span-full rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-cyan-50/70">
               Loading room types…
             </div>
+          ) : loadError ? (
+            <div className="col-span-full rounded-xl border border-rose-300/30 bg-rose-500/10 p-6 text-center text-sm text-rose-100">
+              {loadError}
+            </div>
+          ) : roomTypes.length === 0 ? (
+            <div className="col-span-full rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-cyan-50/70">
+              No rooms are available right now.
+            </div>
+          ) : (
+            roomTypes.map((rt) => {
+              const slug = String(rt.name).toLowerCase().replace(/\s+/g, '-');
+              const hero = getRoomTypeImage(rt.name);
+              return (
+                <Link key={rt.id} to={`/portal/rooms/${slug}`}
+                  className="group flex flex-col overflow-hidden rounded-2xl border border-white/14 bg-white/92 text-slate-900 shadow-xl shadow-slate-950/20 backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-2xl">
+                  <div className="relative h-36 overflow-hidden bg-slate-200">
+                    {hero ? (
+                      <img
+                        src={hero}
+                        alt={rt.name}
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
+                      />
+                    ) : (
+                      <div className="h-full w-full bg-gradient-to-br from-cyan-600 via-blue-700 to-indigo-800" />
+                    )}
+                  </div>
+                  <div className="flex flex-1 flex-col p-4">
+                    <h3 className="text-base font-bold">{rt.name}</h3>
+                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">{rt.description}</p>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {rt.amenities?.slice(0, 3).map((a) => (
+                        <span key={a} className="rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-medium text-cyan-700">{a}</span>
+                      ))}
+                    </div>
+                    <div className="mt-auto flex items-end justify-between pt-3">
+                      <p className="text-lg font-bold text-slate-900">KES {Number(rt.base_price).toLocaleString()}<span className="text-xs font-normal text-slate-500"> / night</span></p>
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition group-hover:bg-cyan-600">
+                        View <ArrowRight className="h-3.5 w-3.5" />
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })
           )}
-          {roomTypes.map((rt) => {
-            const slug = String(rt.name).toLowerCase().replace(/\s+/g, '-');
-            const hero = getRoomTypeImage(rt.name);
-            return (
-              <Link key={rt.id} to={`/portal/rooms/${slug}`}
-                className="group flex flex-col overflow-hidden rounded-2xl border border-white/14 bg-white/92 text-slate-900 shadow-xl shadow-slate-950/20 backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-2xl">
-                <div className="relative h-36 overflow-hidden bg-slate-200">
-                  {hero ? (
-                    <img
-                      src={hero}
-                      alt={rt.name}
-                      className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
-                    />
-                  ) : (
-                    <div className="h-full w-full bg-gradient-to-br from-cyan-600 via-blue-700 to-indigo-800" />
-                  )}
-                </div>
-                <div className="flex flex-1 flex-col p-4">
-                  <h3 className="text-base font-bold">{rt.name}</h3>
-                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">{rt.description}</p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {rt.amenities?.slice(0, 3).map((a) => (
-                      <span key={a} className="rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-medium text-cyan-700">{a}</span>
-                    ))}
-                  </div>
-                  <div className="mt-auto flex items-end justify-between pt-3">
-                    <p className="text-lg font-bold text-slate-900">KES {Number(rt.base_price).toLocaleString()}<span className="text-xs font-normal text-slate-500"> / night</span></p>
-                    <span className="inline-flex items-center gap-1 rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition group-hover:bg-cyan-600">
-                      View <ArrowRight className="h-3.5 w-3.5" />
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
         </div>
       </section>
 
