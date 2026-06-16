@@ -30,7 +30,7 @@ export default function PortalDigitalKeyPage() {
     }
     try {
       const res = await lookupPortalBooking({ reference: reference.trim(), lastName: lastName.trim() });
-      setBooking(res.data.data ?? null);
+      setBooking(res.data.data.booking ?? null);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg ?? 'No booking found for those details.');

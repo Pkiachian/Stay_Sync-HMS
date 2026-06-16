@@ -32,7 +32,7 @@ export default function PortalCheckInPage() {
     }
     try {
       const res = await lookupPortalBooking({ reference: reference.trim(), lastName: lastName.trim() });
-      setBooking(res.data.data ?? null);
+      setBooking(res.data.data.booking ?? null);
       setStep('id');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;

@@ -76,9 +76,9 @@ function RequireRole({ allow }: { allow?: string[] }) {
 }
 
 function RoleRedirect() {
-  const user = useAuthStore((s) => s.user);
-  if (!user) return <Navigate to="/login" replace />;
-  return <Navigate to={ROLE_HOME[user.role] ?? '/login'} replace />;
+  // Unknown URL — send everyone to the portal first. Authenticated users
+  // can navigate onward to their role-specific dashboard from there.
+  return <Navigate to="/portal" replace />;
 }
 
 // Helper so each page declares which roles may visit it.
@@ -113,6 +113,9 @@ export const router = createBrowserRouter([
         element: <DashboardLayout />,
         children: [
           // Universal routes — visible to admin + manager + receptionist + housekeeper.
+          // The top-level '/' above (outside RequireAuth) handles anonymous
+          // visitors by sending them to /portal. The '/' inside this block
+          // is reached only by authenticated users and renders the dashboard.
           { path: '/', element: <RequireRole />, children: [
             { index: true, element: <DashboardPage /> },
           ]},

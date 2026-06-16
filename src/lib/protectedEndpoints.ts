@@ -371,3 +371,36 @@ export function fetchRoomServiceOrders(params?: Record<string, string | number>)
 export function updateRoomServiceOrderStatus(id: number, status: StaffRoomServiceOrder['status']) {
   return api.patch<{ success: boolean; data: StaffRoomServiceOrder }>(`/room-service-orders/${id}`, { status });
 }
+
+// ─── Payments (desk) ─────────────────────────────────────────────────────────
+
+export type ApiPayment = {
+  id: number;
+  booking_id: number;
+  amount: string | number;
+  payment_method: 'cash' | 'mpesa' | 'card' | 'bank';
+  transaction_reference: string | null;
+  status: 'pending' | 'completed' | 'failed' | 'refunded';
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
+  booking?: ApiBooking | null;
+};
+
+export function verifyMpesaPayment(reference: string) {
+  return api.get<{ success: boolean; data: { payment: ApiPayment; booking: ApiBooking } }>(
+    '/payments/verify',
+    { params: { reference } },
+  );
+}
+
+export function recordManualPayment(payload: {
+  booking_id: number;
+  amount: number;
+  payment_method: 'cash' | 'card' | 'bank';
+  payment_date: string; // YYYY-MM-DD
+  reference_number?: string;
+  status?: 'completed' | 'pending';
+}) {
+  return api.post<{ success: boolean; data: ApiPayment }>('/payments', payload);
+}

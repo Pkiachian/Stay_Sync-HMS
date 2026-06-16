@@ -15,6 +15,10 @@ class FolioCharge extends Model
         'charged_at'
     ];
 
+    protected $casts = [
+        'charged_at' => 'datetime',
+    ];
+
     public function booking()
     {
         return $this->belongsTo(Booking::class);

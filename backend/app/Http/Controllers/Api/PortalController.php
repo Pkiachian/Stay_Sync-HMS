@@ -14,7 +14,9 @@ use App\Services\BookingService;
 use App\Services\MpesaService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class PortalController extends Controller
@@ -111,7 +113,100 @@ class PortalController extends Controller
             return $this->error('No booking found for that reference and last name', null, 404);
         }
 
-        return $this->success('Booking found', $booking);
+        $accessToken = $this->issuePortalToken($booking->id, $data['last_name'], 600);
+
+        return $this->success('Booking found', [
+            'booking'      => $booking,
+            'access_token' => $accessToken,
+            'expires_in'   => 600,
+        ]);
+    }
+
+    /**
+     * List the folio charges and payments for a single booking. Requires a
+     * valid portal access token issued by lookupBooking (or any other route
+     * that proves the guest controls the booking). The booking id is
+     * derived from the token, not the URL — clients cannot pivot to other
+     * bookings by editing the path.
+     */
+    public function listInvoices(Request $request, $id)
+    {
+        $token = (string) $request->query('token', '');
+        $info  = $this->verifyPortalToken($token);
+        if (!$info || $info['booking_id'] !== (int) $id) {
+            return $this->error('Invalid or expired access token', null, 401);
+        }
+
+        $booking = Booking::with(['folioCharges', 'payments'])
+            ->findOrFail($id);
+
+        $charges = $booking->folioCharges->map(function ($c) {
+            $chargedAt = $c->charged_at ? \Illuminate\Support\Carbon::parse($c->charged_at) : null;
+            $createdAt = $c->created_at ? \Illuminate\Support\Carbon::parse($c->created_at) : null;
+            return [
+                'id'          => 'FOLIO-' . $c->id,
+                'date'        => ($chargedAt ?? $createdAt)?->toDateString(),
+                'description' => $c->description,
+                'amount'      => (float) $c->amount,
+                'status'      => 'pending',
+            ];
+        })->values();
+
+        $payments = $booking->payments
+            ->where('status', 'completed')
+            ->map(function ($p) {
+                $paidAt = $p->paid_at ? \Illuminate\Support\Carbon::parse($p->paid_at) : null;
+                $createdAt = $p->created_at ? \Illuminate\Support\Carbon::parse($p->created_at) : null;
+                return [
+                    'id'          => 'PAY-' . $p->id,
+                    'date'        => ($paidAt ?? $createdAt)?->toDateString(),
+                    'description' => ($p->purpose === 'deposit' ? 'Deposit' : ucfirst($p->payment_method)) . ' payment' . ($p->transaction_reference ? ' · ' . $p->transaction_reference : ''),
+                    'amount'      => (float) $p->amount,
+                    'status'      => 'paid',
+                    'purpose'     => $p->purpose,
+                ];
+            })->values();
+
+        $lines = collect($charges->all())->merge($payments->all())->sortByDesc('date')->values();
+
+        $totalPrice    = (float) $booking->total_price;
+        $chargedTotal  = (float) $booking->folioCharges->sum('amount');
+        $paidTotal     = (float) $booking->payments->where('status', 'completed')->sum('amount');
+        $outstanding   = max(0, max($totalPrice, $chargedTotal) - $paidTotal);
+
+        if ($outstanding > 0.01 && $booking->status !== 'cancelled') {
+            $lines->push([
+                'id'          => 'BAL-' . $booking->id,
+                'date'        => $booking->check_out_date?->toDateString(),
+                'description' => 'Balance due on arrival',
+                'amount'      => $outstanding,
+                'status'      => 'pending',
+            ]);
+            $lines = $lines->sortByDesc('date')->values();
+        }
+
+        Log::info('portal_invoice_viewed', [
+            'booking_id' => $booking->id,
+            'ip'         => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'count'      => $lines->count(),
+        ]);
+
+        $pdfToken = $this->issuePortalToken($booking->id, $info['last_name'], 900, 'pdf');
+
+        return $this->success('Invoices retrieved', [
+            'booking' => [
+                'id'                => $booking->id,
+                'booking_reference' => $booking->booking_reference,
+                'check_in_date'     => $booking->check_in_date?->toDateString(),
+                'check_out_date'    => $booking->check_out_date?->toDateString(),
+                'status'            => $booking->status,
+                'total_price'       => (float) $booking->total_price,
+            ],
+            'lines'         => $lines,
+            'pdf_token'     => $pdfToken,
+            'pdf_expires_in'=> 900,
+        ]);
     }
 
     public function cancelBooking(Request $request, $id)
@@ -145,34 +240,45 @@ class PortalController extends Controller
             'phone'     => 'required|string|min:9|max:20',
             'amount'    => 'required|integer|min:1|max:1000000',
             'reference' => 'required|string|max:12',
+            'purpose'   => 'nullable|in:deposit,full,partial',
         ]);
 
-        $result = $this->mpesa->stkPush($data['phone'], (int) $data['amount'], $data['reference']);
+        $purpose = $data['purpose'] ?? 'deposit';
+
+        $result = $this->mpesa->stkPush($data['phone'], (int) $data['amount'], $data['reference'], $purpose);
 
         if (empty($result) || isset($result['errorCode'])) {
             $message = $result['errorMessage'] ?? 'M-Pesa request failed. Please try again.';
             return $this->error($message, $result, 502);
         }
 
-        return $this->success('STK push sent. Check your phone to complete payment.', $result);
+        return $this->success('STK push sent. Check your phone to complete payment.', [
+            'stk'     => $result,
+            'purpose' => $purpose,
+        ]);
     }
 
     public function invoice(Request $request, $id)
     {
-        $request->validate([
-            'last_name' => 'required|string',
-        ]);
-
         $type = $request->query('type', 'invoice');
         if (!in_array($type, ['invoice', 'receipt'], true)) {
             $type = 'invoice';
         }
 
+        $token = (string) $request->query('token', '');
+        $info  = $this->verifyPortalToken($token, 'pdf');
+        if (!$info || $info['booking_id'] !== (int) $id) {
+            return $this->error('Invalid or expired access token', null, 401);
+        }
+
         $booking = Booking::with(['guest', 'room', 'roomType', 'payments'])->findOrFail($id);
 
-        if (strcasecmp($booking->guest->last_name, $request->query('last_name')) !== 0) {
-            return $this->error('Last name does not match the guest on this booking', null, 403);
-        }
+        Log::info('portal_invoice_pdf_viewed', [
+            'booking_id' => $booking->id,
+            'type'       => $type,
+            'ip'         => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
 
         $pdf = Pdf::loadView('invoice', compact('booking', 'type'));
 
@@ -293,5 +399,42 @@ class PortalController extends Controller
         }
 
         return $this->success('Order found', $order);
+    }
+
+    /**
+     * Issue a short-lived, booking-bound, signed token. The payload is
+     * encrypted with the app key, so a leaked token without the app key
+     * can't be forged or inspected, and the embedded expiry is enforced
+     * on every verify.
+     */
+    private function issuePortalToken(int $bookingId, string $lastName, int $ttlSeconds = 600, string $purpose = 'list'): string
+    {
+        $payload = [
+            'bid'       => $bookingId,
+            'ln'        => strtolower(trim($lastName)),
+            'purpose'   => $purpose,
+            'expires_at' => time() + $ttlSeconds,
+        ];
+        return Crypt::encryptString(json_encode($payload));
+    }
+
+    private function verifyPortalToken(string $token, string $expectedPurpose = 'list'): ?array
+    {
+        if ($token === '') return null;
+        try {
+            $raw = Crypt::decryptString($token);
+        } catch (\Throwable) {
+            return null;
+        }
+        $data = json_decode($raw, true);
+        if (!is_array($data) || empty($data['expires_at']) || empty($data['bid'])) {
+            return null;
+        }
+        if ($data['expires_at'] < time()) return null;
+        if (($data['purpose'] ?? 'list') !== $expectedPurpose) return null;
+        return [
+            'booking_id' => (int) $data['bid'],
+            'last_name'  => (string) ($data['ln'] ?? ''),
+        ];
     }
 }

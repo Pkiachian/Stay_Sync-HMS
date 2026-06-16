@@ -1,5 +1,39 @@
-### Authentication
+# StaySync HMS
 
+## First-time setup (colleagues)
+
+`.env` files are intentionally **not** committed. After cloning:
+
+```bash
+# 1. Frontend env (required — Vite reads this at build/dev time)
+cp .env.example .env
+# Edit .env and set VITE_API_URL to your backend, e.g.:
+#   VITE_API_URL=http://127.0.0.1:8000/api         (local Laravel on your machine)
+#   VITE_API_URL=http://192.168.1.42:8000/api      (team-mate's machine on LAN)
+#   VITE_API_URL=https://api.staysync.example/api  (deployed)
+
+# 2. Backend env
+cd backend
+cp .env.example .env
+php artisan key:generate
+# Edit backend/.env: set DB_*, MAIL_*, MPESA_*, etc. for your machine.
+
+# 3. Install deps
+cd ..
+npm install
+cd backend && composer install
+
+# 4. Run
+composer run dev   # starts Laravel + queue + logs + Vite concurrently
+```
+
+If the frontend throws `VITE_API_URL is not set` on load, your `.env` is missing or you forgot to restart `npm run dev` after editing it.
+
+CORS is configured in `backend/config/cors.php` to allow `localhost`, `127.0.0.1`, and any `192.168.x.x` / `10.x.x.x` LAN host by pattern. Add your origin there if you hit a CORS block.
+
+---
+
+### Authentication
 All endpoints require the `Authorization` header with a Bearer token:
 
 ```bash
@@ -294,87 +328,10 @@ php artisan view:cache
 
 ## 📊 Project Status
 
-**Current Phase**: Week 2 Development (Billing, Polish, Testing, Deployment)
+**Current Phase**: Pre-deployment hardening (auth, secrets, money-path, M-Pesa).
 
-**Completion Estimate**: 2 weeks from project start
-
-**Last Updated**: May 2026
+**Last Updated**: June 2026
 
 ---
 
 **Built with ❤️ by Alligator Mississipiensis**
-=======
-# React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
->>>>>>> 12606fe (Initial commit)

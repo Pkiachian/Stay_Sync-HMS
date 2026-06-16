@@ -12,6 +12,23 @@ dist
 dist-ssr
 *.local
 
+# Local env files (never commit these)
+.env
+.env.local
+.env.*.local
+
+# Backend
+backend/.env
+backend/vendor
+backend/storage/*.key
+backend/public/build
+backend/public/hot
+backend/public/storage
+backend/storage/logs/*
+backend/bootstrap/cache/*.php
+!backend/storage/logs/.gitkeep
+!backend/bootstrap/cache/.gitkeep
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -26,6 +26,17 @@ class Booking extends Model
         'special_requests'
     ];
 
+    protected $casts = [
+        'check_in_date'    => 'date',
+        'check_out_date'   => 'date',
+        'actual_check_in'  => 'datetime',
+        'actual_check_out' => 'datetime',
+        'subtotal'         => 'decimal:2',
+        'tax_amount'       => 'decimal:2',
+        'discount_amount'  => 'decimal:2',
+        'total_price'      => 'decimal:2',
+    ];
+
     public function guest()
     {
         return $this->belongsTo(Guest::class);

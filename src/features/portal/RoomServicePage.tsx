@@ -106,7 +106,8 @@ export default function PortalRoomServicePage() {
       // Re-use the booking lookup so we can verify the stay without exposing a new endpoint.
       const res = await import('@/lib/portalApi').then((m) => m.lookupPortalBooking({ reference: reference.trim(), lastName: lastName.trim() }));
       if (!res.data.success) throw new Error('lookup failed');
-      const guest = res.data.data?.guest;
+      const booking = res.data.data.booking;
+      const guest = booking?.guest;
       const name = guest ? `${guest.first_name ?? ''} ${guest.last_name ?? ''}`.trim() : lastName.trim();
       setGuestName(name || lastName.trim());
       setValidated(true);

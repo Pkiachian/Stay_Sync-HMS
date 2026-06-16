@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuthStore } from '@/app/store/authStore';
 import { HotelSlideshow } from '@/components/common/HotelSlideshow';
@@ -12,12 +12,47 @@ const RESEND_COOLDOWN_SEC = 30;
 export default function LoginPage() {
   const {
     login, verifyOtp, resendOtp,
-    isAuthenticated, isLoading, user,
+    isAuthenticated, isLoading, user, redirectTo,
   } = useAuthStore();
 
+  const navigate = useNavigate();
+
+  // Where to send each role after a successful login. Mirror of
+  // backend SessionController::ROLE_HOME — keep them in sync.
+  const roleHomeFor = (role: string | undefined): string => {
+    switch (role) {
+      case 'admin':        return '/';
+      case 'manager':      return '/reports';
+      case 'receptionist': return '/bookings';
+      case 'housekeeper':  return '/housekeeping';
+      default:             return '/portal';
+    }
+  };
+
+  // Surface the real reason for a login failure so users (and us) can
+  // distinguish "wrong password" from "server down" from "rate limited".
+  const loginErrorMessage = (err: unknown): string => {
+    const e = err as {
+      response?: { status?: number; data?: { message?: string } };
+      message?: string;
+      code?: string;
+    };
+    const status = e.response?.status;
+    const serverMsg = e.response?.data?.message;
+    if (serverMsg) return serverMsg;
+    if (status === 401) return 'Wrong email or password.';
+    if (status === 422) return 'Email and password are required.';
+    if (status === 429) return 'Too many attempts. Please wait a minute and try again.';
+    if (status === 0 || e.code === 'ERR_NETWORK' || !status) {
+      return 'Cannot reach the server. Is the backend running?';
+    }
+    if (status && status >= 500) return 'The server hit an error. Please try again in a moment.';
+    return e.message ?? 'Something went wrong. Please try again.';
+  };
+
   const [step, setStep] = useState<Step>('credentials');
-  const [email, setEmail]       = useState('adminstaysync@gmail.com');
-  const [password, setPassword] = useState('admin@pass2002');
+  const [email, setEmail]       = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [otpToken, setOtpToken] = useState<string | null>(null);
   const [digits, setDigits]     = useState<string[]>(() => Array(OTP_LENGTH).fill(''));
@@ -32,11 +67,23 @@ export default function LoginPage() {
     return () => clearTimeout(t);
   }, [resendCooldown]);
 
-  if (isAuthenticated) {
-    if (user?.role === 'housekeeper') return <Navigate to="/housekeeping" replace />;
-    if (user?.role === 'manager')      return <Navigate to="/reports"      replace />;
-    return <Navigate to="/" replace />;
+  // If the user is already authenticated when this page first loads (e.g.
+  // they hit /login directly while logged in), bounce them to their role's
+  // home. We deliberately do NOT trigger this on every render — otherwise
+  // a successful verifyOtp() flips isAuthenticated to true, this guard
+  // fires, and the user is sent somewhere confusing mid-flow.
+  const initialAuth = useRef(isAuthenticated);
+  if (initialAuth.current && step === 'credentials') {
+    return <Navigate to={roleHomeFor(user?.role)} replace />;
   }
+
+  // After a successful OTP verify, navigate to the role-specific home.
+  useEffect(() => {
+    if (isAuthenticated && step === 'otp') {
+      const dest = redirectTo ?? roleHomeFor(user?.role);
+      navigate(dest, { replace: true });
+    }
+  }, [isAuthenticated, step, redirectTo, user?.role, navigate]);
 
   const resetOtp = () => {
     setDigits(Array(OTP_LENGTH).fill(''));
@@ -56,8 +103,8 @@ export default function LoginPage() {
         setStep('otp');
         setTimeout(() => inputRefs.current[0]?.focus(), 50);
       }
-    } catch {
-      setError('Invalid credentials. Please try again.');
+    } catch (err: unknown) {
+      setError(loginErrorMessage(err));
     }
   };
 
@@ -149,7 +196,9 @@ export default function LoginPage() {
                     <label className="text-sm font-medium block mb-1.5" htmlFor="email">Email</label>
                     <input
                       id="email" type="email" value={email}
-                      onChange={(e) => setEmail(e.target.value)} required
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@hotel.com" autoComplete="username"
+                      required
                       className="w-full h-10 px-3 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
@@ -161,6 +210,7 @@ export default function LoginPage() {
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••" autoComplete="current-password"
                         required
                         className="w-full h-10 px-3 pr-10 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       />

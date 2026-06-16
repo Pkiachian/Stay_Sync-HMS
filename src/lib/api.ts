@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000/api';
+// Colleagues set VITE_API_URL in their .env; see .env.example.
+const API_URL = import.meta.env.VITE_API_URL;
+if (!API_URL) {
+  throw new Error('VITE_API_URL is not set. Copy .env.example to .env and set it.');
+}
 
 const api = axios.create({
   baseURL: API_URL,

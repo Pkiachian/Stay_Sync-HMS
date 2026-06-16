@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
 {
@@ -34,6 +35,58 @@ class PaymentController extends Controller
         ]);
 
         return $this->success('Payment created successfully', $payment->load('booking'), 201);
+    }
+
+    /**
+     * Look up an M-Pesa payment by its reference code (CheckoutRequestID
+     * or MpesaReceiptNumber). The guest shows the SMS/notification to
+     * the receptionist; receptionist pastes the code; we confirm whether
+     * we have a matching completed payment row.
+     */
+    public function verifyMpesa(Request $request)
+    {
+        $data = $request->validate([
+            'reference' => 'required|string|min:4|max:64',
+        ]);
+
+        $ref = trim($data['reference']);
+
+        $payment = Payment::with('booking')
+            ->where('payment_method', 'mpesa')
+            ->where('status', 'completed')
+            ->where(function ($q) use ($ref) {
+                $q->where('transaction_reference', $ref);
+            })
+            ->first();
+
+        if (!$payment) {
+            // Also accept CheckoutRequestIDs — these can land in the
+            // transaction_reference column when the callback fires before
+            // the receipt is issued. Keep the completed-status filter so
+            // pending rows from failed pushes cannot be used to mark
+            // guests as paid.
+            $payment = Payment::with('booking')
+                ->where('payment_method', 'mpesa')
+                ->where('status', 'completed')
+                ->where('transaction_reference', 'like', "%{$ref}%")
+                ->first();
+        }
+
+        if (!$payment) {
+            return $this->error('No completed M-Pesa payment found for that code', null, 404);
+        }
+
+        Log::info('payment_verified_at_desk', [
+            'payment_id' => $payment->id,
+            'booking_id' => $payment->booking_id,
+            'verified_by' => $request->user()?->id,
+            'ip' => $request->ip(),
+        ]);
+
+        return $this->success('M-Pesa payment verified', [
+            'payment' => $payment,
+            'booking' => $payment->booking,
+        ]);
     }
 
     public function show($id)

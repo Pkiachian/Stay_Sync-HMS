@@ -47,7 +47,8 @@ Route::prefix('portal')->group(function () {
     Route::get('room-types',            [PortalController::class, 'getRoomTypes']);
     Route::get('available-rooms',       [PortalController::class, 'getAvailableRooms']);
     Route::post('bookings',             [PortalController::class, 'createBooking']);
-    Route::get('bookings/lookup',       [PortalController::class, 'lookupBooking']);
+    Route::get('bookings/lookup',       [PortalController::class, 'lookupBooking'])->middleware('throttle:portal-lookup');
+    Route::get('bookings/{id}/invoices',[PortalController::class, 'listInvoices']);
     Route::post('bookings/{id}/cancel', [PortalController::class, 'cancelBooking']);
     Route::get('bookings/{id}/invoice', [PortalController::class, 'invoice']);
     Route::post('pay',                  [PortalController::class, 'stkPush']);
@@ -99,11 +100,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('guests',             GuestController::class);
         Route::apiResource('bookings',           BookingController::class);
         Route::apiResource('housekeeping-tasks', HousekeepingTaskController::class);
-        Route::apiResource('payments',           PaymentController::class);
 
         // Concierge / service requests inbox
         Route::get('service-requests',            [ServiceRequestStaffController::class, 'index']);
         Route::patch('service-requests/{id}',     [ServiceRequestStaffController::class, 'update']);
+
+        // Payment desk actions — verify M-Pesa codes and record manual payments.
+        // Declared BEFORE the apiResource below so the literal "/verify" segment
+        // is matched as verifyMpesa, not as the show endpoint with id="verify".
+        Route::get('payments/verify', [PaymentController::class, 'verifyMpesa']);
+        Route::apiResource('payments',           PaymentController::class);
 
         // Room service orders (kitchen fulfilment)
         Route::get('room-service-orders',         [RoomServiceOrderStaffController::class, 'index']);
@@ -140,18 +146,22 @@ Route::middleware('auth:sanctum')->group(function () {
         // Rate Overrides
         Route::apiResource('rate-overrides', RateOverrideController::class);
 
-        // Reports
-        Route::prefix('reports')->group(function () {
-            Route::get('/revenue',          [ReportController::class, 'revenue']);
-            Route::get('/bookings',         [ReportController::class, 'bookings']);
-            Route::get('/occupancy',        [ReportController::class, 'occupancy']);
-            Route::get('/monthly-revenue',  [ReportController::class, 'monthlyRevenue']);
-            Route::get('/monthly-bookings', [ReportController::class, 'monthlyBookings']);
-            Route::get('/pdf',              [ReportController::class, 'pdf']);
-        });
-
         // Hotel settings
         Route::get('/settings',  [SettingsController::class, 'index']);
         Route::put('/settings',  [SettingsController::class, 'update']);
+    });
+
+    /*
+    |----------------------------------------------------------------------
+    | Reports (admin + manager)
+    |----------------------------------------------------------------------
+    */
+    Route::middleware('role:admin,manager')->prefix('reports')->group(function () {
+        Route::get('/revenue',          [ReportController::class, 'revenue']);
+        Route::get('/bookings',         [ReportController::class, 'bookings']);
+        Route::get('/occupancy',        [ReportController::class, 'occupancy']);
+        Route::get('/monthly-revenue',  [ReportController::class, 'monthlyRevenue']);
+        Route::get('/monthly-bookings', [ReportController::class, 'monthlyBookings']);
+        Route::get('/pdf',              [ReportController::class, 'pdf']);
     });
 });

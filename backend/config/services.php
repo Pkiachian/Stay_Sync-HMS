@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    'mpesa' => [
+        // Shared secret required on the M-Pesa STK callback header. Leave
+        // blank in dev to allow sandbox testing; set in production.
+        'callback_secret' => env('MPESA_CALLBACK_SECRET'),
+    ],
+
+    'openai' => [
+        'key' => env('OPENAI_API_KEY'),
+    ],
+
 ];

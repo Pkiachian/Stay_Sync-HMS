@@ -64,10 +64,46 @@ export function createPortalBooking(payload: Record<string, unknown>) {
   return api.post<{ success: boolean; data: PortalBooking }>('/portal/bookings', payload);
 }
 
+export type PortalLookupResponse = {
+  booking: PortalBooking;
+  access_token: string;
+  expires_in: number;
+};
+
 export function lookupPortalBooking(params: { reference: string; lastName: string }) {
-  return api.get<{ success: boolean; data: PortalBooking }>('/portal/bookings/lookup', {
+  return api.get<{ success: boolean; data: PortalLookupResponse }>('/portal/bookings/lookup', {
     params: { reference: params.reference, last_name: params.lastName },
   });
+}
+
+export type PortalInvoiceLine = {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  status: 'paid' | 'pending';
+  purpose?: 'deposit' | 'full' | 'partial' | null;
+};
+
+export type PortalInvoicesResponse = {
+  booking: {
+    id: number;
+    booking_reference: string;
+    check_in_date: string;
+    check_out_date: string;
+    status: string;
+    total_price: number;
+  };
+  lines: PortalInvoiceLine[];
+  pdf_token: string;
+  pdf_expires_in: number;
+};
+
+export function fetchPortalInvoices(bookingId: number, token: string) {
+  return api.get<{ success: boolean; data: PortalInvoicesResponse }>(
+    `/portal/bookings/${bookingId}/invoices`,
+    { params: { token } },
+  );
 }
 
 export function cancelPortalBooking(id: number, lastName: string) {
@@ -84,12 +120,20 @@ export type MpesaStkResponse = {
   CustomerMessage: string;
 };
 
-export function payPortalDeposit(payload: { phone: string; amount: number; reference: string }) {
-  return api.post<{ success: boolean; data: MpesaStkResponse }>('/portal/pay', payload);
+export function payPortalDeposit(payload: {
+  phone: string;
+  amount: number;
+  reference: string;
+  purpose?: 'deposit' | 'full' | 'partial';
+}) {
+  return api.post<{ success: boolean; data: { stk: MpesaStkResponse; purpose: string } }>(
+    '/portal/pay',
+    payload,
+  );
 }
 
-export function buildPortalInvoiceUrl(id: number, lastName: string, type: 'invoice' | 'receipt' = 'invoice') {
-  return `${api.defaults.baseURL}/portal/bookings/${id}/invoice?type=${type}&last_name=${encodeURIComponent(lastName)}`;
+export function buildPortalInvoiceUrl(id: number, token: string, type: 'invoice' | 'receipt' = 'invoice') {
+  return `${api.defaults.baseURL}/portal/bookings/${id}/invoice?type=${type}&token=${encodeURIComponent(token)}`;
 }
 
 export type ServiceRequestType = 'taxi' | 'airport' | 'wakeup' | 'laundry' | 'housekeeping' | 'tour';

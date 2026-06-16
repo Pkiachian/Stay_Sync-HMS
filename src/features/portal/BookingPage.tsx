@@ -8,6 +8,7 @@ import {
   createPortalBooking,
   fetchPortalAvailableRooms,
   fetchPortalRoomTypes,
+  lookupPortalBooking,
   payPortalDeposit,
   type MpesaStkResponse,
   type PortalAvailableRoom,
@@ -305,6 +306,7 @@ function BookingConfirmation({
 }) {
   const [deposit, setDeposit] = useState<DepositState>({ status: 'idle' });
   const [depositAmount, setDepositAmount] = useState<number>(0);
+  const [printing, setPrinting] = useState(false);
 
   const total = Number(booking.total_price) || 0;
   const suggested = Math.max(100, Math.round(total * 0.2));
@@ -322,7 +324,7 @@ function BookingConfirmation({
         amount: depositAmount,
         reference: booking.booking_reference.slice(0, 12),
       });
-      setDeposit({ status: 'sent', data: res.data.data });
+      setDeposit({ status: 'sent', data: res.data.data.stk });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setDeposit({ status: 'error', message: msg ?? 'M-Pesa request failed. Please try again or pay on arrival.' });
@@ -349,10 +351,24 @@ function BookingConfirmation({
             <div><p className="text-xs text-slate-500">Room</p><p className="font-semibold">{booking.room?.room_number} · {booking.room?.room_type?.name ?? booking.room?.roomType?.name}</p></div>
             <div><p className="text-xs text-slate-500">Total</p><p className="font-semibold">KES {Number(booking.total_price).toLocaleString()}</p></div>
           </div>
-          <a href={buildPortalInvoiceUrl(booking.id, booking.guest?.last_name ?? '', 'invoice')} target="_blank" rel="noreferrer"
-            className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:border-cyan-300 hover:text-cyan-700">
-            <Printer className="h-3.5 w-3.5" /> Print invoice
-          </a>
+          <button type="button" disabled={printing} onClick={() => {
+            const guestLast = (booking.guest?.last_name ?? '').trim();
+            if (!guestLast) return;
+            setPrinting(true);
+            void lookupPortalBooking({ reference: booking.booking_reference, lastName: guestLast })
+              .then((res) => {
+                const token = res.data.data.access_token;
+                const url = buildPortalInvoiceUrl(booking.id, token, 'invoice');
+                window.open(url, '_blank', 'noreferrer');
+              })
+              .catch(() => {
+                /* swallow — the user can try from the reservations page */
+              })
+              .finally(() => setPrinting(false));
+          }}
+            className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:border-cyan-300 hover:text-cyan-700 disabled:opacity-60">
+            <Printer className="h-3.5 w-3.5" /> {printing ? 'Opening…' : 'Print invoice'}
+          </button>
         </div>
 
         {deposit.status !== 'sent' && (

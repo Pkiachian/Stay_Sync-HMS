@@ -5,10 +5,15 @@ import {
   Mail, Calendar, User, BedDouble, DollarSign,
   CheckCircle, XCircle, Clock, Phone, CreditCard,
   Hash, Users, Baby, FileText, ChevronDown,UserCheck,
+  Receipt, Loader2, ShieldCheck,
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { type ApiBooking, createBooking, cancelBooking, fetchRooms, fetchGuests, createGuest, type ApiRoom, type ApiGuest } from '@/lib/protectedEndpoints';
+import {
+  type ApiBooking, createBooking, cancelBooking, fetchRooms, fetchGuests, createGuest,
+  type ApiRoom, type ApiGuest,
+  verifyMpesaPayment, recordManualPayment, type ApiPayment,
+} from '@/lib/protectedEndpoints';
 import { useBookingsApiStore } from '@/app/store/bookingsApiStore';
 import { useAuthStore } from '@/app/store/authStore';
 import { openStaffInvoice } from '@/lib/invoiceApi';
@@ -139,6 +144,21 @@ export default function BookingsPage() {
   const [form, setForm]                 = useState(emptyForm);
   const [formError, setFormError]       = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Confirm-payment sub-modal state. Sits on top of the view modal.
+  type ConfirmTab = 'mpesa' | 'manual';
+  const [confirmOpen, setConfirmOpen]   = useState(false);
+  const [confirmTab, setConfirmTab]     = useState<ConfirmTab>('mpesa');
+  const [mpesaCode, setMpesaCode]       = useState('');
+  const [mpesaError, setMpesaError]     = useState('');
+  const [mpesaVerifying, setMpesaVerifying] = useState(false);
+  const [mpesaMatch, setMpesaMatch]     = useState<ApiPayment | null>(null);
+  const [manualAmount, setManualAmount] = useState('');
+  const [manualMethod, setManualMethod] = useState<'cash' | 'card' | 'bank'>('cash');
+  const [manualRef, setManualRef]       = useState('');
+  const [manualDate, setManualDate]     = useState(() => new Date().toISOString().slice(0, 10));
+  const [manualError, setManualError]   = useState('');
+  const [manualSubmitting, setManualSubmitting] = useState(false);
 
   useEffect(() => {
     void fetchBookings();
@@ -807,16 +827,280 @@ export default function BookingsPage() {
                 )}
               </div>
 
-              <div className="p-4 border-t border-gray-100 flex gap-2">
+              <div className="p-4 border-t border-gray-100 flex flex-wrap gap-2">
                 <button className="flex-1 h-9 bg-blue-500 text-white rounded-xl text-xs font-medium hover:bg-blue-600 flex items-center justify-center gap-1">
                   <Edit className="w-3.5 h-3.5" /> Edit
                 </button>
                 <button className="flex-1 h-9 bg-green-500 text-white rounded-xl text-xs font-medium hover:bg-green-600 flex items-center justify-center gap-1">
                   <UserCheck className="w-3.5 h-3.5" /> Check In
                 </button>
+                {viewBooking.paymentStatus !== 'paid' && (
+                  <button
+                    onClick={() => {
+                      setMpesaCode('');
+                      setMpesaError('');
+                      setMpesaMatch(null);
+                      setManualAmount(String(viewBooking.totalAmount - viewBooking.deposit));
+                      setManualError('');
+                      setConfirmOpen(true);
+                    }}
+                    className="flex-1 h-9 bg-amber-500 text-white rounded-xl text-xs font-medium hover:bg-amber-600 flex items-center justify-center gap-1"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" /> Confirm Payment
+                  </button>
+                )}
                 <button onClick={() => openStaffInvoice(viewBooking.numericId, viewBooking.paymentStatus === 'paid' ? 'receipt' : 'invoice').catch((e) => window.alert(e.message ?? 'Could not open invoice'))} className="flex-1 h-9 bg-gray-100 text-gray-600 rounded-xl text-xs font-medium hover:bg-gray-200 flex items-center justify-center gap-1">
                   <Printer className="w-3.5 h-3.5" /> {viewBooking.paymentStatus === 'paid' ? 'Receipt' : 'Invoice'}
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Confirm Payment Modal ── */}
+      <AnimatePresence>
+        {confirmOpen && viewBooking && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => setConfirmOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 overflow-hidden"
+            >
+              <div className="bg-gradient-to-r from-amber-500 to-orange-500 p-5 text-white">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-mono opacity-80">{viewBooking.id}</span>
+                  <button
+                    onClick={() => setConfirmOpen(false)}
+                    className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <h3 className="text-lg font-bold">Confirm payment</h3>
+                <p className="text-white/80 text-xs">
+                  Outstanding: KES {(viewBooking.totalAmount - viewBooking.deposit).toLocaleString()} ·{' '}
+                  Guest: {viewBooking.guestName}
+                </p>
+              </div>
+
+              <div className="flex border-b border-gray-200">
+                <button
+                  onClick={() => setConfirmTab('mpesa')}
+                  className={cn(
+                    'flex-1 h-10 text-xs font-semibold uppercase tracking-wide flex items-center justify-center gap-1.5',
+                    confirmTab === 'mpesa'
+                      ? 'text-cyan-700 border-b-2 border-cyan-500 bg-cyan-50/50'
+                      : 'text-gray-500 hover:text-gray-700',
+                  )}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" /> Verify M-Pesa
+                </button>
+                <button
+                  onClick={() => setConfirmTab('manual')}
+                  className={cn(
+                    'flex-1 h-10 text-xs font-semibold uppercase tracking-wide flex items-center justify-center gap-1.5',
+                    confirmTab === 'manual'
+                      ? 'text-cyan-700 border-b-2 border-cyan-500 bg-cyan-50/50'
+                      : 'text-gray-500 hover:text-gray-700',
+                  )}
+                >
+                  <Receipt className="w-3.5 h-3.5" /> Record Cash / Card
+                </button>
+              </div>
+
+              <div className="p-5 space-y-3">
+                {confirmTab === 'mpesa' && (
+                  <>
+                    <p className="text-xs text-gray-600">
+                      Ask the guest for the M-Pesa SMS code (e.g. <span className="font-mono">TGJ...</span> or a
+                      CheckoutRequestID). We'll confirm the code matches a completed payment on file.
+                    </p>
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-600">M-Pesa code</span>
+                      <input
+                        type="text"
+                        value={mpesaCode}
+                        onChange={(e) => setMpesaCode(e.target.value.trim())}
+                        placeholder="TGJ7XXXXXX or ws_CO_..."
+                        className="mt-1 w-full h-10 px-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:border-cyan-500"
+                        autoComplete="off"
+                      />
+                    </label>
+
+                    {mpesaError && (
+                      <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                        {mpesaError}
+                      </p>
+                    )}
+
+                    {mpesaMatch && (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs space-y-1">
+                        <p className="font-bold text-emerald-800 flex items-center gap-1.5">
+                          <CheckCircle className="w-3.5 h-3.5" /> Payment verified
+                        </p>
+                        <p className="text-emerald-900/80">
+                          <span className="font-semibold">Amount:</span> KES {Number(mpesaMatch.amount).toLocaleString()}{' '}
+                          · <span className="font-semibold">Booking:</span> {mpesaMatch.booking?.booking_reference ?? viewBooking.id}
+                        </p>
+                        <p className="text-emerald-900/80">
+                          <span className="font-semibold">Receipt:</span> <span className="font-mono">{mpesaMatch.transaction_reference}</span>
+                        </p>
+                        <p className="text-emerald-900/80">
+                          <span className="font-semibold">Paid at:</span> {mpesaMatch.paid_at ? new Date(mpesaMatch.paid_at).toLocaleString() : '—'}
+                        </p>
+                        {mpesaMatch.booking_id !== viewBooking.numericId && (
+                          <p className="rounded-md bg-amber-100 px-2 py-1 text-amber-900">
+                            Heads up: this code is on booking {mpesaMatch.booking?.booking_reference}, not {viewBooking.id}.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        if (!mpesaCode) {
+                          setMpesaError('Enter the M-Pesa code first.');
+                          return;
+                        }
+                        setMpesaVerifying(true);
+                        setMpesaError('');
+                        setMpesaMatch(null);
+                        verifyMpesaPayment(mpesaCode)
+                          .then((res) => setMpesaMatch(res.data.data.payment))
+                          .catch((err: unknown) => {
+                            const status = (err as { response?: { status?: number } })?.response?.status;
+                            const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+                            setMpesaError(
+                              msg ??
+                                (status === 404
+                                  ? 'No completed M-Pesa payment found for that code. The guest may not have completed the transaction, or the callback is still processing.'
+                                  : 'Verification failed. Please try again.'),
+                            );
+                          })
+                          .finally(() => setMpesaVerifying(false));
+                      }}
+                      disabled={mpesaVerifying || !mpesaCode}
+                      className="w-full h-10 rounded-xl bg-cyan-600 text-white text-sm font-semibold hover:bg-cyan-500 disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      {mpesaVerifying ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" /> Verifying…
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="w-4 h-4" /> Verify code
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+
+                {confirmTab === 'manual' && (
+                  <>
+                    <p className="text-xs text-gray-600">
+                      Record a cash, card, or bank payment received at the desk. This creates a completed payment
+                      row on booking <span className="font-mono font-semibold">{viewBooking.id}</span>.
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <label>
+                        <span className="text-xs font-medium text-gray-600">Amount (KES)</span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={manualAmount}
+                          onChange={(e) => setManualAmount(e.target.value)}
+                          className="mt-1 w-full h-10 px-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:border-cyan-500"
+                        />
+                      </label>
+                      <label>
+                        <span className="text-xs font-medium text-gray-600">Method</span>
+                        <select
+                          value={manualMethod}
+                          onChange={(e) => setManualMethod(e.target.value as 'cash' | 'card' | 'bank')}
+                          className="mt-1 w-full h-10 px-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:border-cyan-500 capitalize"
+                        >
+                          <option value="cash">Cash</option>
+                          <option value="card">Card</option>
+                          <option value="bank">Bank</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span className="text-xs font-medium text-gray-600">Date</span>
+                        <input
+                          type="date"
+                          value={manualDate}
+                          onChange={(e) => setManualDate(e.target.value)}
+                          className="mt-1 w-full h-10 px-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:border-cyan-500"
+                        />
+                      </label>
+                      <label>
+                        <span className="text-xs font-medium text-gray-600">Reference (optional)</span>
+                        <input
+                          type="text"
+                          value={manualRef}
+                          onChange={(e) => setManualRef(e.target.value)}
+                          placeholder="Receipt # / slip code"
+                          className="mt-1 w-full h-10 px-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:border-cyan-500"
+                        />
+                      </label>
+                    </div>
+
+                    {manualError && (
+                      <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                        {manualError}
+                      </p>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        const amount = Number(manualAmount);
+                        if (!Number.isFinite(amount) || amount <= 0) {
+                          setManualError('Enter a valid amount.');
+                          return;
+                        }
+                        setManualSubmitting(true);
+                        setManualError('');
+                        recordManualPayment({
+                          booking_id: viewBooking.numericId,
+                          amount,
+                          payment_method: manualMethod,
+                          payment_date: manualDate,
+                          reference_number: manualRef.trim() || undefined,
+                          status: 'completed',
+                        })
+                          .then(() => {
+                            void fetchBookings();
+                            setConfirmOpen(false);
+                          })
+                          .catch((err: unknown) => {
+                            const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+                            setManualError(msg ?? 'Could not record the payment. Please try again.');
+                          })
+                          .finally(() => setManualSubmitting(false));
+                      }}
+                      disabled={manualSubmitting}
+                      className="w-full h-10 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      {manualSubmitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" /> Recording…
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4" /> Record payment
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
               </div>
             </motion.div>
           </div>

@@ -13,7 +13,19 @@ class DatabaseSeeder extends Seeder
 
     public function run(): void
     {
+        // Refuse to seed demo accounts against production. They use a fixed
+        // well-known password and exist purely for local dev convenience.
+        if (app()->environment('production')) {
+            $this->command?->warn('Skipping DatabaseSeeder in production — it would create demo accounts with a public password.');
+            return;
+        }
+
         $this->call(StaySyncSeeder::class);
+
+        // Allow the operator to override the demo password for non-prod
+        // environments where the default "password" is undesirable (e.g.
+        // a shared staging server). Falls back to "password" for local dev.
+        $demoPassword = env('SEED_DEMO_PASSWORD', 'password');
 
         $users = [
             [
@@ -43,7 +55,7 @@ class DatabaseSeeder extends Seeder
                 ['email' => $row['email']],
                 [
                     'name'              => $row['name'],
-                    'password'          => Hash::make('password'),
+                    'password'          => Hash::make($demoPassword),
                     'role'              => $row['role'],
                     'email_verified_at' => now(),
                 ],

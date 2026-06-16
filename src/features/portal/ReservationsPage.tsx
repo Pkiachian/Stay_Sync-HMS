@@ -46,6 +46,7 @@ export default function PortalReservationsPage() {
   const [reference, setReference] = useState(params.get('ref') ?? '');
   const [lastName,  setLastName]  = useState(params.get('last') ?? '');
   const [booking,   setBooking]   = useState<PortalBooking | null>(null);
+  const [accessToken, setAccessToken] = useState('');
   const [error,     setError]     = useState('');
   const [loading,   setLoading]   = useState(false);
   const [actionNotice, setActionNotice] = useState<string>('');
@@ -62,11 +63,13 @@ export default function PortalReservationsPage() {
     setLoading(true);
     try {
       const res = await lookupPortalBooking({ reference: reference.trim(), lastName: lastName.trim() });
-      setBooking(res.data.data ?? null);
+      setBooking(res.data.data.booking ?? null);
+      setAccessToken(res.data.data.access_token ?? '');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg ?? 'No booking found for those details.');
       setBooking(null);
+      setAccessToken('');
     } finally {
       setLoading(false);
     }
@@ -183,11 +186,11 @@ export default function PortalReservationsPage() {
 
               <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Documents</p>
-                <a href={buildPortalInvoiceUrl(booking.id, lastName.trim(), 'invoice')} target="_blank" rel="noreferrer"
+                <a href={buildPortalInvoiceUrl(booking.id, accessToken, 'invoice')} target="_blank" rel="noreferrer"
                   className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800">
                   <Printer className="h-3.5 w-3.5" /> Print invoice
                 </a>
-                <a href={buildPortalInvoiceUrl(booking.id, lastName.trim(), 'receipt')} target="_blank" rel="noreferrer"
+                <a href={buildPortalInvoiceUrl(booking.id, accessToken, 'receipt')} target="_blank" rel="noreferrer"
                   className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-cyan-300 hover:text-cyan-700">
                   <Receipt className="h-3.5 w-3.5" /> Print receipt
                 </a>

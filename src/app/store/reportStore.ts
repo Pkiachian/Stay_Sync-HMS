@@ -59,10 +59,25 @@ export const useReportStore = create<ReportStore>((set) => ({
         },
         isLoading: false,
       });
-    } catch {
+    } catch (err: unknown) {
+      // Surface the real reason so users (and the next debugger) can tell
+      // whether it's a network error, 401, 403, 500, etc.
+      const e = err as {
+        response?: { status?: number; data?: { message?: string } };
+        message?: string;
+      };
+      const status = e.response?.status;
+      const serverMessage = e.response?.data?.message;
+      const detail =
+        serverMessage
+        ?? (status === 401 ? 'Your session has expired. Please sign in again.' : null)
+        ?? (status === 403 ? 'Your role does not have access to reports.' : null)
+        ?? (status === 0 || !status ? 'Cannot reach the backend. Is the Laravel server running?' : null)
+        ?? e.message
+        ?? 'Unknown error';
       set({
         isLoading: false,
-        error: 'Live reports unavailable.',
+        error: `Live reports unavailable — ${detail}`,
       });
     }
   },

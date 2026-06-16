@@ -37,5 +37,12 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('resend-otp', function (Request $request) {
             return Limit::perHour(5)->by($request->ip());
         });
+
+        // Public portal booking lookup — caps brute-force attempts at
+        // guessing (reference, last_name) pairs. Bypassed for staff auth.
+        RateLimiter::for('portal-lookup', function (Request $request) {
+            $ref = strtolower((string) $request->query('reference', ''));
+            return Limit::perMinutes(5, 10)->by($ref . '|' . $request->ip());
+        });
     }
 }
