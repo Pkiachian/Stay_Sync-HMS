@@ -24,11 +24,15 @@ class RoomStatusLogController extends Controller
         $logs = $query->limit(100)->get();
 
         $summary = [
-            'available'    => Room::where('status', 'available')->count(),
-            'occupied'     => Room::where('status', 'occupied')->count(),
-            'dirty'        => Room::where('status', 'dirty')->count(),
-            'cleaning'     => Room::where('status', 'cleaning')->count(),
-            'maintenance'  => Room::where('status', 'maintenance')->count(),
+            'available'     => Room::where('status', 'available')->count(),
+            'occupied'      => Room::where('status', 'occupied')->count(),
+            'dirty'         => Room::where('status', 'dirty')->count(),
+            'cleaning'      => Room::where('status', 'cleaning')->count(),
+            'clean'         => Room::where('status', 'clean')->count(),
+            'inspected'     => Room::where('status', 'inspected')->count(),
+            'reserved'      => Room::where('status', 'reserved')->count(),
+            'maintenance'   => Room::where('status', 'maintenance')->count(),
+            'out_of_service'=> Room::where('status', 'out_of_service')->count(),
         ];
 
         return $this->success('Room status log retrieved successfully', [

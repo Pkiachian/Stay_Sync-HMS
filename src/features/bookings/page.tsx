@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Search, Filter, Eye, Edit, X, Printer,
@@ -10,7 +10,7 @@ import {
 import { useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
-  type ApiBooking, createBooking, cancelBooking, fetchRooms, fetchGuests, createGuest,
+  type ApiBooking, type ApiRoomType, createBooking, cancelBooking, fetchRoomTypes, fetchRooms, fetchGuests, createGuest,
   type ApiRoom, type ApiGuest,
   verifyMpesaPayment, recordManualPayment, type ApiPayment,
 } from '@/lib/protectedEndpoints';
@@ -79,14 +79,6 @@ function mapApiBooking(booking: ApiBooking): Booking {
   };
 }
 
-const ROOM_TYPES = ['Standard King', 'Deluxe King', 'Deluxe Twin', 'Suite', 'Penthouse'];
-const AVAILABLE_ROOMS: Record<string, string[]> = {
-  'Standard King': ['101','102','103','104','105','106','107','108'],
-  'Deluxe King':   ['201','202','204','206'],
-  'Deluxe Twin':   ['203','205'],
-  'Suite':         ['301','302','303'],
-  'Penthouse':     ['401','402'],
-};
 const ROOM_PRICES: Record<string, number> = {
   'Standard King': 8000,
   'Deluxe King':   12000,
@@ -113,10 +105,13 @@ const PAYMENT_STYLES: Record<string, string> = {
 };
 
 // ─── Empty form state ─────────────────────────────────────────────────────────
+// Default roomType / roomPrice start blank; the form's `useEffect` below
+// fills them in once room types load from the API, so we never pretend
+// a "Standard King" exists if the DB doesn't have one.
 const emptyForm = {
   guestName: '', phone: '', email: '', idNumber: '',
   checkIn: '', checkOut: '', adults: 1, children: 0,
-  roomType: 'Standard King', roomNumber: '', roomPrice: 8000,
+  roomType: '', roomNumber: '', roomPrice: 0,
   deposit: 0, paymentMethod: 'Mpesa', paymentStatus: 'unpaid',
   bookingStatus: 'pending', specialRequests: '',
 };// ─── Helper ───────────────────────────────────────────────────────────────────
@@ -135,6 +130,7 @@ export default function BookingsPage() {
   const fetchBookings = useBookingsApiStore((state) => state.fetchBookings);
   const isAuthed = useAuthStore((state) => state.isAuthenticated);
   const [rooms, setRooms]               = useState<ApiRoom[]>([]);
+  const [roomTypes, setRoomTypes]       = useState<ApiRoomType[]>([]);
   const [search, setSearch]             = useState(() => searchParams.get('q') ?? '');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter]     = useState('');
@@ -168,16 +164,24 @@ export default function BookingsPage() {
     setBookings(apiBookings.map(mapApiBooking));
   }, [apiBookings]);
 
-  // Load real rooms so the form can submit room_id + room_type_id to Laravel.
+  // Load real rooms and room types so the form can submit room_id +
+  // room_type_id to Laravel and so the form options come from the DB.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetchRooms();
-        const payload = Array.isArray(res.data) ? res.data : res.data.data;
-        if (!cancelled) setRooms(payload ?? []);
+        const [roomsRes, typesRes] = await Promise.all([fetchRooms(), fetchRoomTypes()]);
+        const roomsPayload = Array.isArray(roomsRes.data) ? roomsRes.data : roomsRes.data.data;
+        const typesPayload = Array.isArray(typesRes.data) ? typesRes.data : typesRes.data.data;
+        if (!cancelled) {
+          setRooms(roomsPayload ?? []);
+          setRoomTypes(typesPayload ?? []);
+        }
       } catch {
-        if (!cancelled) setRooms([]);
+        if (!cancelled) {
+          setRooms([]);
+          setRoomTypes([]);
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -213,9 +217,41 @@ export default function BookingsPage() {
   const taxes       = Math.round(subtotal * 0.09);
   const totalAmount = subtotal + taxes;
 
+  // Live room-type index: prices come from the API, rooms are bucketed by
+  // their room_type_id. The legacy ROOM_PRICES constant is now only a
+  // fallback used while the API request is in flight on a cold page.
+  const priceByTypeName = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const t of roomTypes) map[t.name] = Number(t.base_price);
+    return map;
+  }, [roomTypes]);
+
+  const roomsByTypeName = useMemo(() => {
+    const map: Record<string, ApiRoom[]> = {};
+    for (const r of rooms) {
+      const typeName = r.room_type?.name ?? r.roomType?.name;
+      if (!typeName) continue;
+      (map[typeName] ??= []).push(r);
+    }
+    return map;
+  }, [rooms]);
+
+  // When the user opens the new-booking form, fill in the first available
+  // room type + price so the form is ready to use immediately. We don't
+  // pick a default room number — that's user-driven.
+  useEffect(() => {
+    if (!showForm || form.roomType || roomTypes.length === 0) return;
+    const first = roomTypes[0];
+    setForm((prev) => ({
+      ...prev,
+      roomType: first.name,
+      roomPrice: Number(first.base_price) || 0,
+    }));
+  }, [showForm, form.roomType, roomTypes]);
+
   // Dynamic pricing
   const getDynamicPrice = (type: string, checkIn: string) => {
-    let base = ROOM_PRICES[type] ?? 8000;
+    let base = priceByTypeName[type] ?? ROOM_PRICES[type] ?? 8000;
     if (checkIn) {
       const day = new Date(checkIn).getDay();
       if (day === 5 || day === 6) base = Math.round(base * 1.2); // Weekend +20%
@@ -418,7 +454,7 @@ export default function BookingsPage() {
               className="h-9 pl-3 pr-8 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 appearance-none"
             >
               <option value="all">All Room Types</option>
-              {ROOM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              {roomTypes.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
           </div>
@@ -640,7 +676,7 @@ export default function BookingsPage() {
                       <label className="text-xs font-medium text-gray-500 block mb-1">Room Type *</label>
                       <select value={form.roomType} onChange={(e) => handleFormChange('roomType', e.target.value)}
                         className="w-full h-9 px-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-                        {ROOM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                        {roomTypes.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
                       </select>
                     </div>
                     <div>
@@ -648,11 +684,11 @@ export default function BookingsPage() {
                       <select value={form.roomNumber} onChange={(e) => handleFormChange('roomNumber', e.target.value)}
                         className="w-full h-9 px-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
                         <option value="">Select room</option>
-                        {(AVAILABLE_ROOMS[form.roomType] ?? []).map((r) => {
-                          const conflict = hasConflict(r, form.checkIn, form.checkOut);
+                        {(roomsByTypeName[form.roomType] ?? []).map((r) => {
+                          const conflict = hasConflict(String(r.room_number), form.checkIn, form.checkOut);
                           return (
-                            <option key={r} value={r} disabled={conflict}>
-                              Room {r} {conflict ? '(Booked)' : '(Available)'}
+                            <option key={r.id} value={String(r.room_number)} disabled={conflict}>
+                              Room {r.room_number} {conflict ? '(Booked)' : '(Available)'}
                             </option>
                           );
                         })}

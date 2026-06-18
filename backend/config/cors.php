@@ -43,9 +43,6 @@ return [
     )) ?: [
         // LAN dev: allow any RFC1918 private IP on a non-standard port.
         '#^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$#',
-        // Vercel preview + production deployments. Every branch deploy gets
-        // a unique *.vercel.app subdomain, so use a pattern.
-        '#^https://[a-z0-9-]+\.vercel\.app$#',
     ]),
 
     'allowed_headers' => ['*'],

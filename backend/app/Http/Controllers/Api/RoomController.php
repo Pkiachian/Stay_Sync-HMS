@@ -20,7 +20,7 @@ class RoomController extends Controller
             'room_type_id' => 'required|exists:room_types,id',
             'room_number' => 'required|unique:rooms',
             'floor' => 'required|integer|min:0',
-            'status' => 'required|in:available,occupied,dirty,cleaning,maintenance,out_of_service',
+            'status' => 'required|in:available,occupied,dirty,cleaning,clean,inspected,reserved,maintenance,out_of_service',
             'is_active' => 'required|boolean'
         ]);
 
@@ -40,13 +40,63 @@ class RoomController extends Controller
             'room_type_id' => 'sometimes|required|exists:room_types,id',
             'room_number' => 'sometimes|required|unique:rooms,room_number,' . $room->id,
             'floor' => 'sometimes|required|integer|min:0',
-            'status' => 'sometimes|required|in:available,occupied,dirty,cleaning,maintenance,out_of_service',
+            'status' => 'sometimes|required|in:available,occupied,dirty,cleaning,clean,inspected,reserved,maintenance,out_of_service',
             'is_active' => 'sometimes|required|boolean'
         ]);
 
         $room->update($validated);
 
         return $this->success('Room updated successfully', $room->load('roomType'));
+    }
+
+    public function updateStatus(Request $request, Room $room)
+    {
+        $validated = $request->validate([
+            'status' => 'required|in:available,occupied,dirty,cleaning,clean,inspected,reserved,maintenance,out_of_service',
+            'notes'  => 'nullable|string|max:1000',
+        ]);
+
+        $oldStatus = $room->status;
+
+        if ($oldStatus === $validated['status']) {
+            return $this->success('Room status unchanged', $room->load('roomType'));
+        }
+
+        $room->status = $validated['status'];
+        $room->save();
+
+        \App\Models\RoomStatusLog::create([
+            'room_id'     => $room->id,
+            'old_status'  => $oldStatus,
+            'new_status'  => $validated['status'],
+            'changed_by'  => $request->user()?->id,
+            'changed_at'  => now(),
+        ]);
+
+        return $this->success('Room status updated successfully', $room->load('roomType'));
+    }
+
+    public function statusSummary()
+    {
+        $counts = Room::query()
+            ->selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        $states = [
+            'available', 'occupied', 'dirty', 'cleaning',
+            'clean', 'inspected', 'reserved', 'maintenance', 'out_of_service',
+        ];
+
+        $summary = [];
+        foreach ($states as $state) {
+            $summary[$state] = (int) ($counts[$state] ?? 0);
+        }
+
+        return $this->success('Room status summary retrieved successfully', [
+            'summary' => $summary,
+            'total_rooms' => (int) array_sum($summary),
+        ]);
     }
 
     public function destroy(Room $room)

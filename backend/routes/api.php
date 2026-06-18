@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\HousekeepingTaskController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\RateOverrideController;
 use App\Http\Controllers\Api\RoomServiceOrderStaffController;
@@ -93,6 +94,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin,manager,receptionist,housekeeper')->group(function () {
 
         // Rooms & Room Types (read only for staff)
+        //
+        // The literal "rooms/status-summary" and "rooms/{room}/status" routes
+        // MUST be registered BEFORE the apiResource('rooms') below, otherwise
+        // "/rooms/status-summary" gets matched by `rooms.show` with
+        // id="status-summary" and returns 404. Laravel matches in declaration
+        // order, and a literal segment beats a wildcard only when the literal
+        // route is registered first.
+        Route::get('rooms/status-summary', [RoomController::class, 'statusSummary']);
+        Route::post('rooms/{room}/status', [RoomController::class, 'updateStatus']);
         Route::apiResource('rooms',      RoomController::class)->only(['index', 'show']);
         Route::apiResource('room-types', RoomTypeController::class)->only(['index', 'show']);
 
@@ -120,6 +130,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Dashboard
         Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
+
+        // Front-desk activity feed for the header bell — derived from recent
+        // bookings, payments, room-status changes, and service requests.
+        Route::get('/notifications', [NotificationController::class, 'index']);
 
         // Global search
         Route::get('/search', [SearchController::class, 'index']);

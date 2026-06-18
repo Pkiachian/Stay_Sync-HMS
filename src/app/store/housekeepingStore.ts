@@ -30,7 +30,7 @@ export const useHousekeepingStore = create<HousekeepingStore>((set) => ({
     } catch {
       set({
         isLoading: false,
-        error: 'Live housekeeping data unavailable. Showing cached demo data.',
+        error: 'Live housekeeping data unavailable. Please check your connection and try again.',
       });
     }
   },

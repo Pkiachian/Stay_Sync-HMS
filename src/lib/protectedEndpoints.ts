@@ -29,11 +29,22 @@ export type DashboardStatsResponse = {
 
 // ─── Rooms ───────────────────────────────────────────────────────────────────
 
+export type RoomStatus =
+  | 'available'
+  | 'occupied'
+  | 'dirty'
+  | 'cleaning'
+  | 'clean'
+  | 'inspected'
+  | 'reserved'
+  | 'maintenance'
+  | 'out_of_service';
+
 export type ApiRoom = {
   id: number;
   room_number: string;
   floor: number;
-  status: string;
+  status: RoomStatus | string;
   is_active?: boolean;
   // Laravel serializes the `roomType()` relation as `room_type`
   room_type?: {
@@ -47,6 +58,8 @@ export type ApiRoom = {
     base_price?: number;
   };
 };
+
+export type RoomStatusSummary = Record<RoomStatus, number> & { total_rooms?: number };
 
 export type ApiRoomType = {
   id: number;
@@ -208,6 +221,16 @@ export function searchAll(q: string, limit = 8) {
 
 export function fetchRooms(params?: Record<string, string | number>) {
   return api.get<PaginatedResponse<ApiRoom> | ApiRoom[]>('/rooms', { params });
+}
+
+export function fetchRoomStatusSummary() {
+  return api.get<{ success?: boolean; data: { summary: RoomStatusSummary; total_rooms: number } }>(
+    '/rooms/status-summary',
+  );
+}
+
+export function updateRoomStatus(roomId: number, payload: { status: RoomStatus; notes?: string }) {
+  return api.post<{ success?: boolean; data: ApiRoom }>(`/rooms/${roomId}/status`, payload);
 }
 
 export function fetchRoomTypes() {
@@ -403,4 +426,25 @@ export function recordManualPayment(payload: {
   status?: 'completed' | 'pending';
 }) {
   return api.post<{ success: boolean; data: ApiPayment }>('/payments', payload);
+}
+
+// ─── Notifications (header bell) ──────────────────────────────────────────────
+
+export type NotificationType = 'booking' | 'payment' | 'room_status' | 'service_request';
+
+export type ApiNotification = {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  actor: string | null;
+  created_at: string | null;
+  href: string | null;
+};
+
+export function fetchNotifications(limit = 8) {
+  return api.get<{ success?: boolean; data: { notifications: ApiNotification[]; count: number } }>(
+    '/notifications',
+    { params: { limit } },
+  );
 }
